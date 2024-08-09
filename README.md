@@ -1,6 +1,7 @@
 # 🚀 marklive.nvim
 
 A Neovim plugin for rendering markdown files in terminal
+<img width="2334" alt="marklive nvim" src="https://github.com/user-attachments/assets/51d2c2f6-f465-4f9c-85c7-018843b88c20">
 
 # ✨ Features
 
