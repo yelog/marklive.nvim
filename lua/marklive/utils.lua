@@ -75,4 +75,20 @@ utils.generate_query_regex = function(preview)
   }
 end
 
+utils.setHighlight = function(highlight_config)
+  print('test')
+  if highlight_config == nil then
+    return
+  end
+  -- Iterating over objects
+  for name, config in pairs(highlight_config) do
+    if config.highlight ~= nil then
+      vim.api.nvim_set_hl(0, name, config.highlight)
+    end
+    if config.matchAdd ~= nil then
+      vim.fn.matchadd(name, config.matchAdd)
+    end
+  end
+end
+
 return utils

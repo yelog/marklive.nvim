@@ -18,7 +18,10 @@ M.setup = function(config)
   query = generate_result.query
   regex_list = generate_result.regex_list
 
-  -- highlight
+  -- set highlight
+  utils.setHighlight(M.config.highlight_config or {})
+
+  -- set item highlight
   for name, previewConfig in pairs(M.config.preview) do
     if previewConfig.highlight ~= nil then
       vim.api.nvim_set_hl(0, name, previewConfig.highlight)
@@ -52,7 +55,7 @@ M.enable = function()
   M.config.enable = true
   vim.cmd [[
         augroup Marklive
-        autocmd FileChangedShellPost,Syntax,TextChanged,InsertLeave,TextChangedI,WinScrolled * lua require('marklive').render()
+        autocmd FileChangedShellPost,Syntax,TextChanged,InsertLeave,TextChangedI * lua require('marklive').render()
         augroup END
     ]]
 end
