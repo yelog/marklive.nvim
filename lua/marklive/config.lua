@@ -1,4 +1,3 @@
-local render = require('marklive.render')
 return {
   -- is enable
   enable = true,
@@ -76,7 +75,7 @@ return {
       highlight = { bg = '#FFFF00', fg = '#000000' }
     },
     MarkliveTag = {
-      matchadd = "\\v#[^# ]+",
+      matchadd = "\\v #[^# ]+",
       highlight = { fg = '#BB9AF7', bg = '#322E45' }
     },
   },
@@ -126,34 +125,33 @@ return {
       render = 'list'
     },
     link = { -- Link
-      icon = { '' },
+      icon = { '🔗' },
       regex = "[^!]%[[^%[%]]-%](%([^)]-%))",
       hl_group = 'markdownLinkText',
     },
     -- Can't write a regular expression
     link_first = {
-      icon = { '', '' },
+      icon = { '🔗', '' },
       regex = "^%[[^%[%]]-%](%([^)]-%))",
       hl_group = 'markdownLinkText',
     },
     image = { -- Image
-      icon = { '', '' },
+      icon = { '', '🎨' },
       regex = "(!)%[[^%[%]]-%](%(.-%))",
       hl_group = 'markdownLinkText',
     },
-    tableLine = { -- Table line
-      -- icon = '┃',
-      icon = '│',
-      regex = "[^|]+(%|)",
-      hl_group = 'tableSeparator'
+    table_delimiter_row = {
+      hl_group = 'tableSeparator',
+      query = { "(pipe_table_delimiter_row) @table_delimiter_row" },
+      render = 'table_delimiter_row'
     },
-    -- tableRow = {
-    --   icon = '─',
-    --   width = '',
-    --   -- query = { "(pipe_table_delimiter_row (pipe_table_delimiter_cell) @tableRow)" },
-    --   regex = '%-',
-    --   hl_group = 'tableBorder'
-    -- },
+    table_normal_cell = {
+      icon = '│',
+      query = { "(pipe_table_header (pipe_table_cell) @table_normal_cell)",
+        "(pipe_table_row (pipe_table_cell) @table_normal_cell)" },
+      hl_group = 'tableBorder',
+      render = 'table_normal_cell',
+    },
     inline_code = { -- inline code
       icon = ' ',
       hl_group = "markdownCode",
@@ -174,16 +172,6 @@ return {
     },
     mark = {
       regex = "(<mark>).-(</mark>)",
-    },
-    markdownFootnote1 = {
-      icon = '󰲠',
-      regex = "(%[%^1%])",
-      hl_group = "markdownFootnote",
-    },
-    markdownFootnote2 = {
-      icon = '󰲢',
-      regex = "(%[%^2%])",
-      hl_group = "markdownFootnote",
     },
     thematic_break = { -- divider
       icon = '─',
@@ -241,6 +229,11 @@ return {
     atx_h6_marker = { -- Heading 6
       icon = "󰉰",
       hl_group = "markdownH6Delimiter"
+    },
+    tag = { -- Heading 6
+      icon = "📌",
+      hl_group = "MarkliveTag",
+      regex = " (#)[^# ]+",
     },
   },
 }

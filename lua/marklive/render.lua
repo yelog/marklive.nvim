@@ -96,6 +96,7 @@ render.init = function(namespace, config, query, regex_list)
         namespace = namespace,
         hl_group = hl_group,
         line = line,
+        win_width = width,
         icon = icon,
         start_row = start_row,
         start_col = start_col,
@@ -108,6 +109,7 @@ render.init = function(namespace, config, query, regex_list)
         namespace = namespace,
         hl_group = hl_group,
         line = line,
+        win_width = width,
         icon = icon,
         start_row = start_row,
         start_col = start_col,
@@ -183,6 +185,54 @@ render.list = function(rc)
   vim.api.nvim_buf_set_extmark(rc.bufnr, rc.namespace, rc.start_row, rc.end_col - 2, {
     end_line = rc.end_row,
     end_col = rc.end_col - 1,
+    conceal = rc.icon,
+    hl_group = rc.hl_group, -- use_name
+    priority = 0,           -- To ignore conceal hl_group when focused
+  })
+end
+
+render.table = function(rc)
+  print(rc.start_row, rc.end_row, rc.start_col, rc.end_col)
+  -- 处理所有出现的 | 改为 │, 所有的 -|- 改为 ┼, 所有的 -| 改为 ├, 所有的 |- 改为 ┤
+  local line = vim.api.nvim_buf_get_lines(rc.bufnr, rc.start_row, rc.end_row, false)
+  local icon = '│';
+  for i, v in ipairs(line) do
+    print(v)
+    -- 都使用 conceal 来实现
+    vim.api.nvim_buf_set_extmark(rc.bufnr, rc.namespace, rc.start_row + i, 0, {
+      virt_text = { { icon:rep(rc.win_width), rc.hl_group } },
+      virt_text_pos = "overlay",
+      hl_mode = "combine",
+    })
+  end
+end
+
+render.table_delimiter_row = function(rc)
+  -- 对行内容 rc.line 进行字符循环
+  for i = rc.start_col, rc.end_col - 1 do
+    vim.api.nvim_buf_set_extmark(rc.bufnr, rc.namespace, rc.start_row, i, {
+      end_line = rc.end_row,
+      end_col = i + 1,
+      conceal = i == 0 and '├' or i == rc.end_col - 1 and '┤' or rc.line.sub(rc.line, i + 1, i + 1) == '|' and '┼' or
+          '─',
+      hl_group = rc.hl_group, -- use_name
+      priority = 0,           -- To ignore conceal hl_group when focused
+    })
+  end
+end
+
+render.table_normal_cell = function(rc)
+  -- 只替换 | 改为 │
+  vim.api.nvim_buf_set_extmark(rc.bufnr, rc.namespace, rc.start_row, rc.start_col - 2, {
+    end_line = rc.end_row,
+    end_col = rc.start_col - 1,
+    conceal = rc.icon,
+    hl_group = rc.hl_group, -- use_name
+    priority = 0,           -- To ignore conceal hl_group when focused
+  })
+  vim.api.nvim_buf_set_extmark(rc.bufnr, rc.namespace, rc.start_row, rc.end_col, {
+    end_line = rc.end_row,
+    end_col = rc.end_col + 1,
     conceal = rc.icon,
     hl_group = rc.hl_group, -- use_name
     priority = 0,           -- To ignore conceal hl_group when focused
