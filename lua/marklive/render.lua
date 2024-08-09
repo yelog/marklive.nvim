@@ -86,7 +86,7 @@ render.init = function(namespace, config, query, regex_list)
     local start_row, start_col, end_row, end_col = node:range()
     -- get line content
     local line = vim.api.nvim_buf_get_lines(bufnr, start_row, start_row + 1, false)[1]
-    -- local line_length = #line
+    local line_length = #line
     local icon_padding = config.render[name].icon_padding
 
     if type(config.render[name].render) == "function" then
@@ -132,15 +132,15 @@ render.init = function(namespace, config, query, regex_list)
           priority = 0,        -- To ignore conceal hl_group when focused
         })
       end
-      -- local fill_content = ' '
-      -- if config.render[name].hl_fill then
-      --   -- Insert space from the end of the current line to the end of the line
-      --   vim.api.nvim_buf_set_extmark(bufnr, namespace, start_row, line_length, {
-      --     virt_text = { { fill_content:rep(width - line_length), hl_group } },
-      --     virt_text_pos = "overlay",
-      --     hl_mode = "combine",
-      --   })
-      -- end
+      local fill_content = ' '
+      if config.render[name].hl_fill then
+        -- Insert space from the end of the current line to the end of the line
+        vim.api.nvim_buf_set_extmark(bufnr, namespace, start_row, line_length, {
+          virt_text = { { fill_content:rep(width - line_length - 1), hl_group } },
+          virt_text_pos = "overlay",
+          hl_mode = "combine",
+        })
+      end
     end
     -- Insert padding
     -- render.render_padding(namespace, icon_padding, 0, start_row, start_col, end_row, end_col, hl_group)

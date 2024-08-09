@@ -208,7 +208,8 @@ return {
     },
     atx_h1_marker = { -- Heading 1
       icon = "󰉫",
-      hl_group = "markdownH1Delimiter"
+      hl_group = "markdownH1Delimiter",
+      -- hl_fill = true,
     },
     atx_h2_marker = { -- Heading 2
       icon = "󰉬",
