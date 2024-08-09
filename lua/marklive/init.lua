@@ -14,17 +14,17 @@ M.setup = function(config)
   M.config = vim.tbl_deep_extend("force", M.config, config)
 
   -- generate query and regex
-  local generate_result = utils.generate_query_regex(M.config.preview)
+  local generate_result = utils.generate_query_regex(M.config.render)
   query = generate_result.query
   regex_list = generate_result.regex_list
 
   -- set highlight
-  utils.setHighlight(M.config.highlight_config or {})
+  utils.setHighlight(M.config.highlight_config or {}, M.config.filetype)
 
   -- set item highlight
-  for name, previewConfig in pairs(M.config.preview) do
-    if previewConfig.highlight ~= nil then
-      vim.api.nvim_set_hl(0, name, previewConfig.highlight)
+  for name, renderConfig in pairs(M.config.render) do
+    if renderConfig.highlight ~= nil then
+      vim.api.nvim_set_hl(0, name, renderConfig.highlight)
     end
   end
 

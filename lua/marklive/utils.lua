@@ -47,11 +47,11 @@ end
 
 
 -- generate query and regex
-utils.generate_query_regex = function(preview)
+utils.generate_query_regex = function(render)
   local regex_list = {}
   local queries = {}
 
-  for name, content in pairs(preview) do
+  for name, content in pairs(render) do
     if (content.regex ~= nil) then
       regex_list[name] = content.regex
     elseif content.query == nil then
@@ -75,20 +75,52 @@ utils.generate_query_regex = function(preview)
   }
 end
 
-utils.setHighlight = function(highlight_config)
-  print('test')
-  if highlight_config == nil then
+utils.setHighlight = function(highlight_config, filetype)
+  if highlight_config == nil or filetype == nil then
     return
   end
-  -- Iterating over objects
-  for name, config in pairs(highlight_config) do
-    if config.highlight ~= nil then
-      vim.api.nvim_set_hl(0, name, config.highlight)
+
+  vim.api.nvim_create_autocmd("FileType", {
+    -- filetype 是数组, 如 { "markdown"}
+    pattern = filetype,
+    callback = function()
+      -- Iterating over objects
+      for name, config in pairs(highlight_config) do
+        if (config ~= nil) then
+          if config.highlight ~= nil then
+            vim.api.nvim_set_hl(0, name, config.highlight)
+          end
+          if config.matchadd ~= nil then
+            vim.fn.matchadd(name, config.matchadd)
+          end
+        end
+      end
     end
-    if config.matchAdd ~= nil then
-      vim.fn.matchadd(name, config.matchAdd)
-    end
-  end
+  })
 end
+
+-- utils.clearHighlight = function(highlight_config, filetype)
+--   if highlight_config == nil or filetype == nil then
+--     return
+--   end
+--
+--   vim.api.nvim_create_autocmd("FileType", {
+--     -- filetype 是数组, 如 { "markdown"}
+--     pattern = filetype,
+--     callback = function()
+--       -- Iterating over objects
+--       for name, config in pairs(highlight_config) do
+--         if (config ~= nil) then
+--           if config.highlight ~= nil then
+--             vim.api.nvim_set_hl(0, name, config.highlight)
+--           end
+--           if config.matchadd ~= nil then
+--             vim.fn.matchadd(name, config.matchadd)
+--           end
+--         end
+--       end
+--     end
+--   })
+-- end
 
 return utils

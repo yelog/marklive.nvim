@@ -77,17 +77,17 @@ return function(namespace, config, query, regex_list)
   -- Iterate over the query results
   for id, node in query_obj:iter_captures(root, bufnr, 0, -1) do
     local name = query_obj.captures[id]
-    local icon = type(config.preview[name].icon) == "table" and config.preview[name].icon[1] or
-        config.preview[name].icon
-    local hl_group = config.preview[name].hl_group or name
+    local icon = type(config.render[name].icon) == "table" and config.render[name].icon[1] or
+        config.render[name].icon
+    local hl_group = config.render[name].hl_group or name
     local start_row, start_col, end_row, end_col = node:range()
     -- get line content
     local line = vim.api.nvim_buf_get_lines(bufnr, start_row, start_row + 1, false)[1]
     local line_length = #line
-    local icon_padding = config.preview[name].icon_padding
+    local icon_padding = config.render[name].icon_padding
 
     -- set icon
-    if config.preview[name].whole_line then
+    if config.render[name].whole_line then
       vim.api.nvim_buf_set_extmark(bufnr, namespace, start_row, 0, {
         virt_text = { { icon:rep(width), hl_group } },
         virt_text_pos = "overlay",
@@ -103,7 +103,7 @@ return function(namespace, config, query, regex_list)
       })
     end
     local fill_content = ' '
-    if config.preview[name].hl_fill then
+    if config.render[name].hl_fill then
       -- Insert space from the end of the current line to the end of the line
       vim.api.nvim_buf_set_extmark(bufnr, namespace, start_row, line_length, {
         virt_text = { { fill_content:rep(width - line_length), hl_group } },
@@ -115,12 +115,12 @@ return function(namespace, config, query, regex_list)
     render_padding(namespace, icon_padding, 0, start_row, start_col, end_row, end_col, hl_group)
   end
   for name, regex in pairs(regex_list) do
-    local icon = config.preview[name].icon or '';
+    local icon = config.render[name].icon or '';
     local matches = utils.find_matches_with_groups(vim.api.nvim_buf_get_lines(0, 0, -1, false), regex)
-    local icon_padding = config.preview[name].icon_padding
+    local icon_padding = config.render[name].icon_padding
     for _, match in ipairs(matches) do
       if #match.groups == 0 then
-        local hl_group = config.preview[name].hl_group or name
+        local hl_group = config.render[name].hl_group or name
         vim.api.nvim_buf_set_extmark(bufnr, namespace, match.lnum, match.start_col, {
           end_line = match.lnum,
           end_col = match.end_col,
@@ -132,7 +132,7 @@ return function(namespace, config, query, regex_list)
           hl_group)
       else
         for i, group in ipairs(match.groups) do
-          local hl_group = config.preview[name].hl_group or name
+          local hl_group = config.render[name].hl_group or name
           local conceal = type(icon) == "table" and icon[i] or icon
           -- print(conceal, match.groups)
           vim.api.nvim_buf_set_extmark(bufnr, namespace, match.lnum, group.start_col, {
@@ -142,7 +142,7 @@ return function(namespace, config, query, regex_list)
             hl_group = hl_group,
             priority = 0,
           })
-          render_padding(namespace, config.preview[name].icon_padding, i, match.lnum, group.start_col, match.lnum,
+          render_padding(namespace, config.render[name].icon_padding, i, match.lnum, group.start_col, match.lnum,
             group.end_col + 1, hl_group)
         end
       end

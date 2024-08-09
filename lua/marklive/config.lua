@@ -7,72 +7,79 @@ return {
   -- 3. 'insert-all': show origin content of all when insert mode
   -- show_mode = 'insert-line',
   show_mode = 'normal-line',
+  filetype = { 'markdown' }, -- or {"*.md", "*.wiki"}
   highlight_config = {
-    MarkliveBold = {
-      matchAdd = "\\v\\*\\*[a-zA-Z-_\\u4e00-\\u9fa5]+\\*\\*",
+    markdownBold = {
       highlight = { bold = true, fg = "#ef9020" }
     },
-    MarkliveItalic = {
-      matchAdd = "\\v[_\\*][^_\\*]+[_\\*]",
+    markdownItalic = {
       highlight = { italic = true, fg = "#d8e020" }
     },
-    MarkliveStrike = {
-      matchAdd = "\\v[~_]{2}[^~_]+[~_]{2}",
+    markdownStrike = {
       highlight = { fg = "#939393", strikethrough = true }
     },
-    MarkliveLink = {
-      matchAdd = "\\v(^|[^!])\\zs\\[[^\\]]+\\]\\([^\\)]+\\)",
+    markdownLinkText = {
       highlight = { fg = '#5c92fa', underline = true }
     },
-    MarkliveImage = {
-      matchAdd = "\\v\\!\\[[^\\[\\]]+\\]\\([^\\(\\)]+\\)",
+    markdownLinkTextDelimiter = {
       highlight = { fg = '#5c92fa', underline = true }
     },
-    MarkliveMarkText = {
-      matchAdd = "\\v\\<mark\\>.*\\<\\/mark\\>",
-      highlight = { bg = '#FFFF00', fg = '#000000' }
+    markdownCode = {
+      highlight = { fg = "#00c4b0", bg = "#1f262f" }
     },
-    MarkliveCode = {
-      matchAdd = "\\v`[^`]+`",
-      highlight = { fg = "#ffb454", bg = "#354251" }
-    },
-    MarkliveBlockQuote = {
+    markdownBlockquote = {
       highlight = { fg = '#e6e1cf' }
     },
-    MarkliveFootnote = {
-      matchAdd = "\\v\\[\\^\\d\\]",
+    markdownFootnote = {
       highlight = { fg = '#5c92fa' }
     },
-    MarkliveTag = {
-      matchAdd = "\\v#\\S+",
+    markdownH1 = {
       highlight = { fg = '#BB9AF7', bg = '#322E45' }
     },
-    MarkliveH1 = {
-      matchAdd = "\\v^\\s*#\\s+.*$",
-      highlight = { fg = "#0082b4", bold = true }
+    markdownH1Delimiter = {
+      highlight = { fg = '#BB9AF7', bg = '#322E45' }
     },
-    MarkliveH2 = {
-      matchAdd = "\\v^\\s*##\\s+.*$",
-      highlight = { fg = "#ef9020", bold = true }
+    markdownH2 = {
+      highlight = { fg = "#f7c59f", bold = true }
     },
-    MarkliveH3 = {
-      matchAdd = "\\v^\\s*###\\s+.*$",
-      highlight = { fg = "#e990ab", bold = true }
+    markdownH2Delimiter = {
+      highlight = { fg = "#f7c59f", bold = true }
     },
-    MarkliveH4 = {
-      matchAdd = "\\v^\\s*####\\s+.*$",
-      highlight = { fg = "#96cbb3", bold = true }
+    markdownH3 = {
+      highlight = { fg = "#00a79d", bold = true }
     },
-    MarkliveH5 = {
-      matchAdd = "\\v^\\s*#####\\s+.*$",
-      highlight = { fg = "#c196cb", bold = true }
+    markdownH3Delimiter = {
+      highlight = { fg = "#00a79d", bold = true }
     },
-    MarkliveH6 = {
-      matchAdd = "\\v^\\s*######\\s+.*$",
-      highlight = { fg = "#96b7cb", bold = true }
+    markdownH4 = {
+      highlight = { fg = "#6b5b95", bold = true }
+    },
+    markdownH4Delimiter = {
+      highlight = { fg = "#6b5b95", bold = true }
+    },
+    markdownH5 = {
+      highlight = { fg = "#92a8d1", bold = true }
+    },
+    markdownH5Delimiter = {
+      highlight = { fg = "#92a8d1", bold = true }
+    },
+    markdownH6 = {
+      highlight = { fg = "#955251", bold = true }
+    },
+    markdownH6Delimiter = {
+      highlight = { fg = "#955251", bold = true }
+    },
+    -- extend
+    MarkliveMarkText = {
+      matchadd = "\\v\\<mark\\>.*\\<\\/mark\\>",
+      highlight = { bg = '#FFFF00', fg = '#000000' }
+    },
+    MarkliveTag = {
+      matchadd = "\\v#\\S+",
+      highlight = { fg = '#BB9AF7', bg = '#322E45' }
     },
   },
-  preview = {
+  render = {
     task_list_marker_unchecked = { -- Task list marker unchecked
       icon = "",
       highlight = {
@@ -116,21 +123,19 @@ return {
     link = { -- Link
       icon = { '' },
       regex = "[^!]%[[^%[%]]-%](%([^)]-%))",
-      hl_group = 'MarkliveLink',
+      hl_group = 'markdownLinkText',
       icon_padding = { { 0, 1 } }
     },
     -- Can't write a regular expression
     link_first = {
       icon = { '', '' },
       regex = "^%[[^%[%]]-%](%([^)]-%))",
-      hl_group = 'MarkliveLink',
-      icon_padding = { { 0, 1 } }
+      hl_group = 'markdownLinkText',
     },
     image = { -- Image
       icon = { '', '' },
       regex = "(!)%[[^%[%]]-%](%(.-%))",
-      hl_group = 'MarkliveImage',
-      icon_padding = { { 0, 1 } }
+      hl_group = 'markdownLinkText',
     },
     tableLine = { -- Table line
       -- icon = '┃',
@@ -169,12 +174,12 @@ return {
     markdownFootnote1 = {
       icon = '󰲠',
       regex = "(%[%^1%])",
-      hl_group = "MarkliveFootnote",
+      hl_group = "markdownFootnote",
     },
     markdownFootnote2 = {
       icon = '󰲢',
       regex = "(%[%^2%])",
-      hl_group = "MarkliveFootnote",
+      hl_group = "markdownFootnote",
     },
     thematic_break = { -- divider
       icon = '─',
@@ -197,7 +202,7 @@ return {
         "(block_quote (paragraph (block_continuation) @block_quote_marker))",
         "(block_quote (block_continuation) @block_quote_marker)" },
       -- hl_fill = true,
-      hl_group = 'MarkliveBlockQuote'
+      hl_group = 'markdownBlockquote'
     },
     callout_note = {
       icon = { '', '' },
@@ -211,27 +216,27 @@ return {
     },
     atx_h1_marker = { -- Heading 1
       icon = "󰉫",
-      hl_group = "MarkliveH1"
+      hl_group = "markdownH1Delimiter"
     },
     atx_h2_marker = { -- Heading 2
       icon = "󰉬",
-      hl_group = "MarkliveH2"
+      hl_group = "markdownH2Delimiter"
     },
     atx_h3_marker = { -- Heading 3
       icon = "󰉭",
-      hl_group = "MarkliveH3"
+      hl_group = "markdownH3Delimiter"
     },
     atx_h4_marker = { -- Heading 4
       icon = "󰉮",
-      hl_group = "MarkliveH4"
+      hl_group = "markdownH4Delimiter"
     },
     atx_h5_marker = { -- Heading 5
       icon = "󰉯",
-      hl_group = "MarkliveH5"
+      hl_group = "markdownH5Delimiter"
     },
     atx_h6_marker = { -- Heading 6
       icon = "󰉰",
-      hl_group = "MarkliveH6"
+      hl_group = "markdownH6Delimiter"
     },
   },
 }
