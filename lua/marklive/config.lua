@@ -1,3 +1,4 @@
+local render = require('marklive.render')
 return {
   -- is enable
   enable = true,
@@ -104,21 +105,25 @@ return {
       highlight = {
         fg = '#E9AD5B'
       },
-      icon_padding = { 0, 1 }
+      -- Using a separate rendering method;
+      -- firstly because Tree-sitter parses lists inconsistently—the first item
+      -- in an indented list has a width of 4, while the others have a width of 2;
+      -- Secondly, to preserve spaces.;
+      render = 'list'
     },
     list_marker_star = { -- List marker star
       icon = '',
       highlight = {
         fg = '#00C5DE'
       },
-      icon_padding = { 0, 1 }
+      render = 'list'
     },
     list_marker_plus = { -- List marker plus
       icon = '',
       highlight = {
         fg = '#9FF8BB'
       },
-      icon_padding = { 0, 1 }
+      render = 'list'
     },
     link = { -- Link
       icon = { '' },

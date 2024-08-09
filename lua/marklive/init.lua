@@ -43,7 +43,7 @@ M.setup = function(config)
 end
 
 M.render = function()
-  render(M.namespace, M.config, query, regex_list)
+  render.init(M.namespace, M.config, query, regex_list)
 end
 
 
