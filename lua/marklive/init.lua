@@ -18,9 +18,6 @@ M.setup = function(config)
   query = generate_result.query
   regex_list = generate_result.regex_list
 
-  -- set highlight
-  utils.setHighlight(M.config.highlight_config or {}, M.config.filetype)
-
   -- set item highlight
   for name, renderConfig in pairs(M.config.render) do
     if renderConfig.highlight ~= nil then
@@ -53,6 +50,10 @@ end
 M.enable = function()
   M.render();
   M.config.enable = true
+
+  -- set highlight
+  utils.setHighlight(M.config.highlight_config or {}, M.config.filetype)
+
   vim.cmd [[
         augroup Marklive
         autocmd FileChangedShellPost,Syntax,TextChanged,InsertLeave,TextChangedI * lua require('marklive').render()
@@ -63,6 +64,10 @@ end
 M.disable = function()
   M.config.enable = false
   vim.api.nvim_buf_clear_namespace(0, M.namespace, 0, -1)
+
+  -- clear highlight
+  utils.clearHighlight(M.config.filetype)
+
   -- clear augroup
   vim.cmd [[
         augroup Marklive

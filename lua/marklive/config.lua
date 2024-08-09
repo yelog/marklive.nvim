@@ -34,10 +34,10 @@ return {
       highlight = { fg = '#5c92fa' }
     },
     markdownH1 = {
-      highlight = { fg = '#BB9AF7', bg = '#322E45' }
+      highlight = { fg = '#ff6f61', bold = true }
     },
     markdownH1Delimiter = {
-      highlight = { fg = '#BB9AF7', bg = '#322E45' }
+      highlight = { fg = '#ff6f61', bold = true }
     },
     markdownH2 = {
       highlight = { fg = "#f7c59f", bold = true }
@@ -75,7 +75,7 @@ return {
       highlight = { bg = '#FFFF00', fg = '#000000' }
     },
     MarkliveTag = {
-      matchadd = "\\v#\\S+",
+      matchadd = "\\v#[^# ]+",
       highlight = { fg = '#BB9AF7', bg = '#322E45' }
     },
   },
@@ -124,7 +124,6 @@ return {
       icon = { '' },
       regex = "[^!]%[[^%[%]]-%](%([^)]-%))",
       hl_group = 'markdownLinkText',
-      icon_padding = { { 0, 1 } }
     },
     -- Can't write a regular expression
     link_first = {
@@ -207,12 +206,12 @@ return {
     callout_note = {
       icon = { '', '' },
       regex = ">(%s%[!)NOTE(%])",
-      hl_group = 'MarkliveBlockQuote',
+      hl_group = 'markdownBlockquote',
     },
     callout_info = {
       icon = { '󰙎', '' },
       regex = ">(%s%[!)INFO(%])",
-      hl_group = 'MarkliveBlockQuote',
+      hl_group = 'markdownBlockquote',
     },
     atx_h1_marker = { -- Heading 1
       icon = "󰉫",
