@@ -26,6 +26,8 @@ Using `lazy.nvim`
 {
     "yelog/marklive.nvim",
     dependencies = { 'nvim-treesitter/nvim-treesitter' },
+    lazy = true,
+    ft = "markdown",
     opts = {}
 }
 ```
@@ -64,7 +66,6 @@ If you don't want to use a Nerd Font, you can replace the icons with Unicode sym
 
 - Implement background style rendering for Markdown’s`Block Quote` 
 - Implement style rendering for Markdown’s`Code Block`
-- Built-in colorscheme
 
 # 🔑 License
 
