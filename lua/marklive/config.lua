@@ -70,14 +70,30 @@ return {
       highlight = { fg = "#955251", bold = true }
     },
     -- extend
-    MarkliveMarkText = {
+    markliveMarkText = {
       matchadd = "\\v\\<mark\\>.*\\<\\/mark\\>",
       highlight = { bg = '#FFFF00', fg = '#000000' }
     },
-    MarkliveTag = {
+    markliveTag = {
       matchadd = "\\v #[^# ]+",
       highlight = { fg = '#BB9AF7', bg = '#322E45' }
     },
+    markliveCalloutNote = {
+      matchadd = "\\v> \\[!]NOTE\\]",
+      highlight = { fg = '#047AFF' }
+    },
+    markliveCalloutError = {
+      matchadd = "\\v> \\[!]ERROR\\]",
+      highlight = { fg = '#FB464C' }
+    },
+    markliveCalloutTip = {
+      matchadd = "\\v> \\[!]TIP\\]",
+      highlight = { fg = '#53DFDD' }
+    },
+    markliveCalloutWarning = {
+      matchadd = "\\v> \\[!]WARNING\\]",
+      highlight = { fg = '#E9973F' }
+    }
   },
   render = {
     task_list_marker_unchecked = { -- Task list marker unchecked
@@ -197,14 +213,24 @@ return {
       hl_group = 'markdownBlockquote'
     },
     callout_note = {
-      icon = { '', '' },
-      regex = ">(%s%[!)NOTE(%])",
-      hl_group = 'markdownBlockquote',
+      icon = { '', ' ', 'N', 'o', 't', 'e', '' },
+      regex = ">%s(%[)(!)(N)(O)(T)(E)(%])",
+      hl_group = 'markliveCalloutNote',
     },
-    callout_info = {
-      icon = { '󰙎', '' },
-      regex = ">(%s%[!)INFO(%])",
-      hl_group = 'markdownBlockquote',
+    callout_error = {
+      icon = { '', ' ', 'E', 'r', 'r', 'o', 'r', '' },
+      regex = ">%s(%[)(!)(E)(R)(R)(O)(R)(%])",
+      hl_group = 'markliveCalloutError',
+    },
+    callout_tip = {
+      icon = { '󰛨', ' ', 'T', 'i', 'p', '' },
+      regex = ">%s(%[)(!)(T)(I)(P)(%])",
+      hl_group = 'markliveCalloutTip',
+    },
+    callout_warning = {
+      icon = { '', ' ', 'W', 'a', 'r', 'n', 'i', 'n', 'g', '' },
+      regex = ">%s(%[)(!)(W)(A)(R)(N)(I)(N)(G)(%])",
+      hl_group = 'markliveCalloutWarning',
     },
     atx_h1_marker = { -- Heading 1
       icon = "󰉫",
@@ -233,7 +259,7 @@ return {
     },
     tag = { -- Heading 6
       icon = "📌",
-      hl_group = "MarkliveTag",
+      hl_group = "markliveTag",
       regex = " (#)[^# ]+",
     },
   },
