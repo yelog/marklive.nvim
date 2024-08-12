@@ -57,7 +57,7 @@ Plug 'yelog/marklive.nvim'
 
 # ⚙️ Configuration
 
-The default configuration for **marklive.nvim** is shown in the link [config.lua](https://github.com/yelog/marklive.nvim)
+The default configuration for **marklive.nvim** is shown in the link [config.lua](https://github.com/yelog/marklive.nvim/blob/main/lua/marklive/config.lua)
 
 If you don't want to use a Nerd Font, you can replace the icons with Unicode symbols.
 
