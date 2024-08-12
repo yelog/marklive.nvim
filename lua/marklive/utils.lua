@@ -166,7 +166,6 @@ utils.setHighlight = function(highlight_config, filetype)
   -- 保存当前的 highlight 配置
   utils.highlight_configs[filetype] = highlight_config
 
-  print('callback')
   vim.api.nvim_create_autocmd("FileType", {
     group = augroup,
     pattern = filetype,

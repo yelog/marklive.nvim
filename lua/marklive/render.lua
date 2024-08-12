@@ -192,12 +192,10 @@ render.list = function(rc)
 end
 
 render.table = function(rc)
-  print(rc.start_row, rc.end_row, rc.start_col, rc.end_col)
   -- 处理所有出现的 | 改为 │, 所有的 -|- 改为 ┼, 所有的 -| 改为 ├, 所有的 |- 改为 ┤
   local line = vim.api.nvim_buf_get_lines(rc.bufnr, rc.start_row, rc.end_row, false)
   local icon = '│';
   for i, v in ipairs(line) do
-    print(v)
     -- 都使用 conceal 来实现
     vim.api.nvim_buf_set_extmark(rc.bufnr, rc.namespace, rc.start_row + i, 0, {
       virt_text = { { icon:rep(rc.win_width), rc.hl_group } },

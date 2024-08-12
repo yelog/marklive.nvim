@@ -64,10 +64,10 @@ return {
       highlight = { fg = "#92a8d1", bold = true }
     },
     markdownH6 = {
-      highlight = { fg = "#955251", bold = true }
+      highlight = { fg = "#E8DAEF", bold = true }
     },
     markdownH6Delimiter = {
-      highlight = { fg = "#955251", bold = true }
+      highlight = { fg = "#E8DAEF", bold = true }
     },
     -- extend
     markliveMarkText = {
