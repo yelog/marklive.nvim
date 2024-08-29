@@ -257,7 +257,7 @@ return {
       icon = "󰉰",
       hl_group = "markdownH6Delimiter"
     },
-    tag = { -- Heading 6
+    tag = { -- Tag
       icon = "📌",
       hl_group = "markliveTag",
       regex = " (#)[^# ]+",
