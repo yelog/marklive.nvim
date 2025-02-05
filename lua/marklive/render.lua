@@ -191,18 +191,30 @@ render.list = function(rc)
   })
 end
 
+-- 仅使用 conceal 很难实现列的等宽, 考虑使用 virt_text 来实现, 但是要考虑到性能(支持光标所在行显示源码)
+---@param rc table
 render.table = function(rc)
-  -- 处理所有出现的 | 改为 │, 所有的 -|- 改为 ┼, 所有的 -| 改为 ├, 所有的 |- 改为 ┤
-  local line = vim.api.nvim_buf_get_lines(rc.bufnr, rc.start_row, rc.end_row, false)
-  local icon = '│';
-  for i, v in ipairs(line) do
-    -- 都使用 conceal 来实现
-    vim.api.nvim_buf_set_extmark(rc.bufnr, rc.namespace, rc.start_row + i, 0, {
-      virt_text = { { icon:rep(rc.win_width), rc.hl_group } },
-      virt_text_pos = "overlay",
-      hl_mode = "combine",
-    })
+  local lines = vim.api.nvim_buf_get_lines(rc.bufnr, rc.start_row, rc.end_row, false)
+  -- Max width of each column
+  local column_max_width = {}
+  for _, line in ipairs(lines) do
+    local current_column_width = 0
+    local current_column = 0
+    for i = 1, #line do
+      local char = line:sub(i, i)
+      if char == "|" then
+        if current_column_width == 0 then
+          current_column = current_column + 1
+          current_column_width = 0
+        else
+          column_max_width[current_column] = math.max(column_max_width[current_column] or 0, current_column_width)
+        end
+      else
+        current_column_width = current_column_width + 1
+      end
+    end
   end
+  print('first column', column_max_width[1])
 end
 
 render.table_delimiter_row = function(rc)

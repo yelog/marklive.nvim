@@ -10,6 +10,7 @@ return {
   filetype = { 'markdown' }, -- or {"*.md", "*.wiki"}
   highlight_config = {
     markdownBold = {
+      matchadd = "\\v\\<b\\>.*\\<\\/b\\>",
       highlight = { bold = true, fg = "#ef9020" }
     },
     markdownItalic = {
@@ -75,8 +76,14 @@ return {
       highlight = { bg = '#FFFF00', fg = '#000000' }
     },
     markliveTag = {
-      matchadd = "\\v #[^# ]+",
+      -- Match a space followed by a hash symbol and any characters that are not a hash or space
+      matchadd = "\\v\\s\\zs#[^# ]+",
       highlight = { fg = '#BB9AF7', bg = '#322E45' }
+    },
+    markliveUser = {
+      -- Match a space followed by an at symbol and any characters that are not an at or space
+      matchadd = "\\v \\@[^@ ]+",
+      highlight = { fg = '#FC7A07' }
     },
     markliveCalloutNote = {
       matchadd = "\\v> \\[!]NOTE\\]",
@@ -168,17 +175,28 @@ return {
       hl_group = 'tableBorder',
       render = 'table_normal_cell',
     },
+    -- pipe_table = {
+    --   icon = '│',
+    --   hl_group = 'tableBorder',
+    --   render = 'table',
+    -- },
     inline_code = { -- inline code
       icon = ' ',
       hl_group = "markdownCode",
       regex = '(`)[^`\n]+(`)',
     },
     italic = { -- Italic
-      regex = "([*_])[^*`~]-([*_])",
+      hl_group = "markdownItalic",
+      regex = "([_])[^_]-([_])",
     },
     bolder = { -- bolder
       icon = '',
       regex = "(%*%*)[^%*]+(%*%*)",
+    },
+    html_bolder = { -- bolder
+      hl_group = 'markdownBold',
+      icon = '',
+      regex = "(<b>).-(</b>)",
     },
     strikethrough = { -- strikethrough
       regex = "(~~)[^~]+(~~)",
@@ -262,5 +280,10 @@ return {
       hl_group = "markliveTag",
       regex = " (#)[^# ]+",
     },
+    user = {
+      icon = "👤",
+      hl_group = "markliveUser",
+      regex = " (@)[^@ ]+",
+    }
   },
 }
