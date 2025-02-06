@@ -203,16 +203,14 @@ render.table = function(rc)
     for i = 1, #line do
       local char = line:sub(i, i)
       if char == "|" then
-        if current_column_width == 0 then
-          current_column = current_column + 1
-          current_column_width = 0
-        else
-          column_max_width[current_column] = math.max(column_max_width[current_column] or 0, current_column_width)
-        end
+        column_max_width[current_column] = math.max(column_max_width[current_column] or 0, current_column_width)
+        current_column = current_column + 1
+        current_column_width = 0
       else
         current_column_width = current_column_width + 1
       end
     end
+    column_max_width[current_column] = math.max(column_max_width[current_column] or 0, current_column_width)
   end
   print('first column', column_max_width[1])
 end
