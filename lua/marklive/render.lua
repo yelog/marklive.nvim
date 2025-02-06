@@ -200,13 +200,27 @@ render.table = function(rc)
   for _, line in ipairs(lines) do
     local current_column_width = 0
     local current_column = 0
+    local is_border = false
+    local blank_count = 0 ---@type number
     for i = 1, #line do
       local char = line:sub(i, i)
       if char == "|" then
+        if blank_count > 0 then
+          current_column_width = current_column_width + 1
+          blank_count = 0
+        end
         column_max_width[current_column] = math.max(column_max_width[current_column] or 0, current_column_width)
         current_column = current_column + 1
         current_column_width = 0
+        is_border = true
+      elseif char == " " then
+        blank_count = blank_count + 1
       else
+        if blank_count > 0 then
+          current_column_width = current_column_width + (is_border and 1 or blank_count)
+          blank_count = 0
+        end
+        is_border = false
         current_column_width = current_column_width + 1
       end
     end
