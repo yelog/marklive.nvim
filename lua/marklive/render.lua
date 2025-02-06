@@ -197,7 +197,8 @@ render.table = function(rc)
   local lines = vim.api.nvim_buf_get_lines(rc.bufnr, rc.start_row, rc.end_row, false)
   -- Max width of each column
   local column_max_width = {}
-  for _, line in ipairs(lines) do
+  for line_index, line in ipairs(lines) do
+    local current_row_index = rc.start_row + line_index - 1
     local current_column_width = 0
     local current_column = 0
     local is_border = false
@@ -218,6 +219,16 @@ render.table = function(rc)
       else
         if blank_count > 0 then
           current_column_width = current_column_width + (is_border and 1 or blank_count)
+          if is_border and blank_count > 1 then
+            print('border', current_row_index, i - blank_count, i - 1)
+            vim.api.nvim_buf_set_extmark(rc.bufnr, rc.namespace, current_row_index, i - blank_count - 1, {
+              end_line = current_row_index,
+              end_col = i - 1,
+              conceal = ' ',
+              hl_group = rc.hl_group, -- use_name
+              priority = 0,           -- To ignore conceal hl_group when focused
+            })
+          end
           blank_count = 0
         end
         is_border = false
@@ -226,7 +237,7 @@ render.table = function(rc)
     end
     column_max_width[current_column] = math.max(column_max_width[current_column] or 0, current_column_width)
   end
-  print('first column', column_max_width[1])
+  -- print('first column', column_max_width[1])
 end
 
 render.table_delimiter_row = function(rc)
