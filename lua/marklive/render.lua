@@ -216,6 +216,14 @@ end
 -- 仅使用 conceal 很难实现列的等宽, 考虑使用 virt_text 来实现, 但是要考虑到性能(支持光标所在行显示源码)
 ---@param rc table
 render.table = function(rc)
+  -- 定义高亮组
+  local border_hl = "MarkliveTableBorder"
+  local header_hl = "MarkliveTableHeader"
+
+  -- 定义高亮（只需定义一次即可）
+  vim.api.nvim_set_hl(0, border_hl, { fg = "#ef9020" })
+  vim.api.nvim_set_hl(0, header_hl, { fg = "#ef9020", bold = true })
+
   -- border 字符定义
   local border = {
     '┌', '┬', '┐',
@@ -228,7 +236,6 @@ render.table = function(rc)
   local namespace = rc.namespace
   local start_row = rc.start_row
   local end_row = rc.end_row
-  local hl_group = rc.hl_group or "MarkliveTable"
   local lines = vim.api.nvim_buf_get_lines(bufnr, start_row, end_row, false)
 
   -- 解析表格每行每列内容
@@ -257,15 +264,15 @@ render.table = function(rc)
   -- 构造边框行（横线）
   local function make_border_row(left, mid, right)
     local row = {}
-    table.insert(row, left)
+    table.insert(row, { left, border_hl })
     for i = 1, col_count do
-      table.insert(row, string.rep(border[11], column_max_width[i] + 2))
+      table.insert(row, { string.rep(border[11], column_max_width[i] + 2), border_hl })
       if i < col_count then
-        table.insert(row, mid)
+        table.insert(row, { mid, border_hl })
       end
     end
-    table.insert(row, right)
-    return table.concat(row)
+    table.insert(row, { right, border_hl })
+    return row
   end
 
   local top_border    = make_border_row(border[1], border[2], border[3])
@@ -273,16 +280,20 @@ render.table = function(rc)
   local bottom_border = make_border_row(border[7], border[8], border[9])
 
   -- 构造内容行
-  local function make_content_row(row_cells)
+  local function make_content_row(row_cells, is_header)
     local row = {}
-    table.insert(row, border[10])
+    table.insert(row, { border[10], border_hl })
     for i = 1, col_count do
       local cell = row_cells[i] or ""
       local pad = column_max_width[i] - vim.fn.strdisplaywidth(cell)
-      table.insert(row, " " .. cell .. string.rep(" ", pad + 1))
-      table.insert(row, border[10])
+      if is_header then
+        table.insert(row, { " " .. cell .. string.rep(" ", pad + 1), header_hl })
+      else
+        table.insert(row, { " " .. cell .. string.rep(" ", pad + 1) })
+      end
+      table.insert(row, { border[10], border_hl })
     end
-    return table.concat(row)
+    return row
   end
 
   -- 检查光标是否在表格范围内，如果在则不渲染表格
@@ -301,35 +312,46 @@ render.table = function(rc)
 
   -- 顶部边框（渲染在表格内容之前的上一行，不占用内容行）
   vim.api.nvim_buf_set_extmark(bufnr, namespace, math.max(0, start_row - 1), 0, vim.tbl_extend("force", virt_opts, {
-    virt_text = { { top_border, hl_group } },
+    virt_text = top_border,
   }))
 
   -- 内容行
   for i, row_cells in ipairs(table_cells) do
-    local content = make_content_row(row_cells)
+    local is_header = i == 1
+    local content = make_content_row(row_cells, is_header)
     local line_idx = start_row + i - 1
     local orig_line = vim.api.nvim_buf_get_lines(bufnr, line_idx, line_idx + 1, false)[1] or ""
     local orig_width = vim.fn.strdisplaywidth(orig_line)
-    local render_width = vim.fn.strdisplaywidth(content)
+    -- 计算内容宽度
+    local render_width = 0
+    for _, seg in ipairs(content) do
+      render_width = render_width + vim.fn.strdisplaywidth(seg[1])
+    end
     local fill = ""
     if render_width < orig_width then
       fill = string.rep(" ", orig_width - render_width)
+      table.insert(content, { fill })
     end
 
     -- 检查当前行是否为 markdown 表格分隔线（如 |---|---|），如果是则只渲染横线，不渲染内容
     local is_sep_line = orig_line:match("^%s*|[%s%-%:|]+|%s*$") and orig_line:find("%-")
     if is_sep_line then
-      local render_width2 = vim.fn.strdisplaywidth(middle_border)
+      local render_width2 = 0
+      for _, seg in ipairs(middle_border) do
+        render_width2 = render_width2 + vim.fn.strdisplaywidth(seg[1])
+      end
       local fill2 = ""
       if render_width2 < orig_width then
         fill2 = string.rep(" ", orig_width - render_width2)
       end
+      local virt = vim.deepcopy(middle_border)
+      table.insert(virt, { fill2 })
       vim.api.nvim_buf_set_extmark(bufnr, namespace, line_idx, 0, vim.tbl_extend("force", virt_opts, {
-        virt_text = { { middle_border .. fill2, hl_group } },
+        virt_text = virt,
       }))
     else
       vim.api.nvim_buf_set_extmark(bufnr, namespace, line_idx, 0, vim.tbl_extend("force", virt_opts, {
-        virt_text = { { content .. fill, hl_group } },
+        virt_text = content,
       }))
     end
   end
@@ -337,13 +359,17 @@ render.table = function(rc)
   -- 底部边框（渲染在表格内容之后的下一行，不占用内容行）
   local last_line = vim.api.nvim_buf_get_lines(bufnr, end_row - 1, end_row, false)[1] or ""
   local orig_width = vim.fn.strdisplaywidth(last_line)
-  local render_width = vim.fn.strdisplaywidth(bottom_border)
+  local render_width = 0
+  for _, seg in ipairs(bottom_border) do
+    render_width = render_width + vim.fn.strdisplaywidth(seg[1])
+  end
   local fill = ""
   if render_width < orig_width then
     fill = string.rep(" ", orig_width - render_width)
+    table.insert(bottom_border, { fill })
   end
   vim.api.nvim_buf_set_extmark(bufnr, namespace, end_row, 0, vim.tbl_extend("force", virt_opts, {
-    virt_text = { { bottom_border .. fill, hl_group } },
+    virt_text = bottom_border,
   }))
 end
 
