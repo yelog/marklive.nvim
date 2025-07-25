@@ -1,6 +1,20 @@
 local utils = require('marklive.utils')
 local render = {}
 
+-- 判断某一行是否在代码块内
+local function is_in_codeblock(bufnr, lnum)
+  -- bufnr: buffer number
+  -- lnum: 0-based line number
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, lnum + 1, false)
+  local codeblock_count = 0
+  for _, line in ipairs(lines) do
+    if line:match("^%s*```") then
+      codeblock_count = codeblock_count + 1
+    end
+  end
+  return codeblock_count % 2 == 1
+end
+
 -- render.render_padding = function(namespace, icon_padding, padding_index, start_row, start_col, end_row, end_col, hl_group)
 --   -- The final construction is in the format of {{0, 0}, {0, 0}}, if icon_padding is a single number, it is converted to {{0, 0}}
 --   -- If it is two numbers {0, 0}, it is {{0,0}}, if it is already in the format of {{0,0}}, no processing is done
@@ -89,8 +103,12 @@ render.init = function(namespace, config, query, regex_list)
     local line_length = #line
     local icon_padding = config.render[name].icon_padding
 
+    -- 检查是否在代码块内，如果是则跳过渲染
+    if is_in_codeblock(bufnr, start_row) then
+      goto continue_query
+    end
+
     if type(config.render[name].render) == "function" then
-      -- config.render[name].render({ bufnr, namespace, hl_group, line, start_row, start_col, end_row, end_col })
       config.render[name].render({
         bufnr = bufnr,
         namespace = namespace,
@@ -134,7 +152,6 @@ render.init = function(namespace, config, query, regex_list)
       end
       local fill_content = ' '
       if config.render[name].hl_fill then
-        -- Insert space from the end of the current line to the end of the line
         vim.api.nvim_buf_set_extmark(bufnr, namespace, start_row, line_length, {
           virt_text = { { fill_content:rep(width - line_length - 1), hl_group } },
           virt_text_pos = "overlay",
@@ -142,6 +159,7 @@ render.init = function(namespace, config, query, regex_list)
         })
       end
     end
+    ::continue_query::
     -- Insert padding
     -- render.render_padding(namespace, icon_padding, 0, start_row, start_col, end_row, end_col, hl_group)
   end
@@ -150,6 +168,10 @@ render.init = function(namespace, config, query, regex_list)
     local matches = utils.find_matches_with_groups(vim.api.nvim_buf_get_lines(0, 0, -1, false), regex)
     local icon_padding = config.render[name].icon_padding
     for _, match in ipairs(matches) do
+      -- 检查是否在代码块内，如果是则跳过渲染
+      if is_in_codeblock(bufnr, match.lnum) then
+        goto continue_regex
+      end
       if #match.groups == 0 then
         local hl_group = config.render[name].hl_group or name
         vim.api.nvim_buf_set_extmark(bufnr, namespace, match.lnum, match.start_col, {
@@ -165,7 +187,6 @@ render.init = function(namespace, config, query, regex_list)
         for i, group in ipairs(match.groups) do
           local hl_group = config.render[name].hl_group or name
           local conceal = type(icon) == "table" and icon[i] or icon
-          -- print(conceal, match.groups)
           vim.api.nvim_buf_set_extmark(bufnr, namespace, match.lnum, group.start_col, {
             end_line = match.lnum,
             end_col = group.end_col + 1,
@@ -177,6 +198,7 @@ render.init = function(namespace, config, query, regex_list)
           -- group.end_col + 1, hl_group)
         end
       end
+      ::continue_regex::
     end
   end
 end
