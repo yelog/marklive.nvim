@@ -315,25 +315,22 @@ render.table = function(rc)
     if render_width < orig_width then
       fill = string.rep(" ", orig_width - render_width)
     end
-    vim.api.nvim_buf_set_extmark(bufnr, namespace, line_idx, 0, vim.tbl_extend("force", virt_opts, {
-      virt_text = { { content .. fill, hl_group } },
-    }))
-    -- 表头下方分隔线（仅在 markdown 表格分隔线行插入横线）
-    if i == 2 then
-      -- 检查当前行是否为 markdown 分隔线（如 |---|---|）
-      local sep_line = orig_line
-      -- 只包含 |、-、:、空格
-      if sep_line:match("^%s*|[%s%-%:|]+|%s*$") then
-        local orig_width2 = vim.fn.strdisplaywidth(sep_line)
-        local render_width2 = vim.fn.strdisplaywidth(middle_border)
-        local fill2 = ""
-        if render_width2 < orig_width2 then
-          fill2 = string.rep(" ", orig_width2 - render_width2)
-        end
-        vim.api.nvim_buf_set_extmark(bufnr, namespace, line_idx, 0, vim.tbl_extend("force", virt_opts, {
-          virt_text = { { middle_border .. fill2, hl_group } },
-        }))
+
+    -- 检查当前行是否为 markdown 表格分隔线（如 |---|---|），如果是则只渲染横线，不渲染内容
+    local is_sep_line = orig_line:match("^%s*|[%s%-%:|]+|%s*$") and orig_line:find("%-")
+    if is_sep_line then
+      local render_width2 = vim.fn.strdisplaywidth(middle_border)
+      local fill2 = ""
+      if render_width2 < orig_width then
+        fill2 = string.rep(" ", orig_width - render_width2)
       end
+      vim.api.nvim_buf_set_extmark(bufnr, namespace, line_idx, 0, vim.tbl_extend("force", virt_opts, {
+        virt_text = { { middle_border .. fill2, hl_group } },
+      }))
+    else
+      vim.api.nvim_buf_set_extmark(bufnr, namespace, line_idx, 0, vim.tbl_extend("force", virt_opts, {
+        virt_text = { { content .. fill, hl_group } },
+      }))
     end
   end
 
