@@ -372,24 +372,20 @@ render.table_normal_cell = function(rc)
 end
 
 -- 表格渲染自动切换（normal模式下，光标进入表格取消渲染，离开表格重新渲染）
-local last_table_range = nil
-local last_bufnr = nil
-local last_namespace = nil
-local last_config = nil
-local last_query = nil
-local last_regex_list = nil
+-- 多表格渲染信息存储
+local table_ranges = {}
 
--- 包装原始 table 渲染函数，记录表格范围
+-- 包装原始 table 渲染函数，记录每个表格范围
 local _orig_table = render.table
 render.table = function(rc)
-  last_table_range = { start_row = rc.start_row, end_row = rc.end_row }
-  last_bufnr = rc.bufnr
-  last_namespace = rc.namespace
-  -- last_config 应为完整的 config（包含 render 字段），而不是 hl_group
-  -- 这里通过 rc.config 传递（需确保调用时有 config 字段）
-  if rc.config then
-    last_config = rc.config
-  end
+  -- 记录每个表格的渲染信息
+  table.insert(table_ranges, {
+    start_row = rc.start_row,
+    end_row = rc.end_row,
+    bufnr = rc.bufnr,
+    namespace = rc.namespace,
+    config = rc.config,
+  })
   _orig_table(rc)
 end
 
@@ -397,28 +393,40 @@ end
 vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
   group = vim.api.nvim_create_augroup("MarkliveTableCursor", { clear = true }),
   callback = function()
-    if not last_table_range or not last_bufnr or not last_namespace then return end
+    if #table_ranges == 0 then return end
     local cursor = vim.api.nvim_win_get_cursor(0)
     local cursor_row = cursor[1] - 1
-    local in_table = cursor_row >= last_table_range.start_row and cursor_row < last_table_range.end_row
-    if in_table then
-      -- 清除表格渲染
-      vim.api.nvim_buf_clear_namespace(last_bufnr, last_namespace, 0, -1)
-    else
-      -- 重新渲染表格
-      if last_query and last_regex_list and last_config then
-        require('marklive.render').init(last_namespace, last_config, last_query, last_regex_list)
+    local cleared = false
+    for _, tbl in ipairs(table_ranges) do
+      local in_table = cursor_row >= tbl.start_row and cursor_row < tbl.end_row
+      if in_table then
+        -- 只清除当前表格的渲染
+        vim.api.nvim_buf_clear_namespace(tbl.bufnr, tbl.namespace, tbl.start_row - 1, tbl.end_row + 1)
+        cleared = true
+      end
+    end
+    if not cleared then
+      -- 光标不在任何表格内，重新渲染所有表格
+      if render.last_namespace and render.last_config and render.last_query and render.last_regex_list then
+        require('marklive.render').init(render.last_namespace, render.last_config, render.last_query, render.last_regex_list)
       end
     end
   end,
 })
 
 -- 包装 init，记录 query 和 regex_list
+render.last_query = nil
+render.last_regex_list = nil
+render.last_namespace = nil
+render.last_config = nil
 local _orig_init = render.init
 render.init = function(namespace, config, query, regex_list)
-  last_query = query
-  last_regex_list = regex_list
-  last_config = config
+  render.last_query = query
+  render.last_regex_list = regex_list
+  render.last_namespace = namespace
+  render.last_config = config
+  -- 渲染前清空表格信息
+  table_ranges = {}
   _orig_init(namespace, config, query, regex_list)
 end
 
