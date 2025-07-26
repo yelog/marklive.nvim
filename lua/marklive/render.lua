@@ -398,14 +398,17 @@ render.table_normal_cell = function(rc)
 end
 
 -- 表格渲染自动切换（normal模式下，光标进入表格取消渲染，离开表格重新渲染）
--- 多表格渲染信息存储
-local table_ranges = {}
+-- 多表格渲染信息存储（改为 buffer-local）
+local table_ranges_by_buf = {}
 
 -- 包装原始 table 渲染函数，记录每个表格范围
 local _orig_table = render.table
 render.table = function(rc)
-  -- 记录每个表格的渲染信息
-  table.insert(table_ranges, {
+  local bufnr = rc.bufnr
+  if not table_ranges_by_buf[bufnr] then
+    table_ranges_by_buf[bufnr] = {}
+  end
+  table.insert(table_ranges_by_buf[bufnr], {
     start_row = rc.start_row,
     end_row = rc.end_row,
     bufnr = rc.bufnr,
@@ -419,6 +422,8 @@ end
 vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
   group = vim.api.nvim_create_augroup("MarkliveTableCursor", { clear = true }),
   callback = function()
+    local bufnr = vim.api.nvim_get_current_buf()
+    local table_ranges = table_ranges_by_buf[bufnr] or {}
     if #table_ranges == 0 then return end
     local cursor = vim.api.nvim_win_get_cursor(0)
     local cursor_row = cursor[1] - 1
@@ -440,6 +445,15 @@ vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
   end,
 })
 
+vim.api.nvim_create_autocmd({ "BufEnter" }, {
+  group = vim.api.nvim_create_augroup("MarkliveTableBufEnter", { clear = true }),
+  callback = function()
+    if render.last_namespace and render.last_config and render.last_query and render.last_regex_list then
+      require('marklive.render').init(render.last_namespace, render.last_config, render.last_query, render.last_regex_list)
+    end
+  end,
+})
+
 -- 包装 init，记录 query 和 regex_list
 render.last_query = nil
 render.last_regex_list = nil
@@ -451,8 +465,9 @@ render.init = function(namespace, config, query, regex_list)
   render.last_regex_list = regex_list
   render.last_namespace = namespace
   render.last_config = config
-  -- 渲染前清空表格信息
-  table_ranges = {}
+  -- 渲染前清空当前 buffer 的表格信息
+  local bufnr = vim.api.nvim_get_current_buf()
+  table_ranges_by_buf[bufnr] = {}
   _orig_init(namespace, config, query, regex_list)
 end
 
