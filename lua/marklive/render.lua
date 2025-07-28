@@ -412,23 +412,71 @@ render.code_block = function(rc)
   local lang = first_line:match("^%s*```(%w+)")
   if not lang then lang = "" end
 
-  -- 1. 隐藏第一行（```xxx），用空格遮挡整行，背景色补全到窗口宽度
-  local win_width = vim.api.nvim_win_get_width(0)
-  vim.api.nvim_buf_set_extmark(bufnr, namespace, start_row, 0, {
-    virt_text = { { string.rep(" ", win_width), codeblock_hl } },
-    virt_text_pos = "overlay",
-    hl_mode = "combine",
-    priority = 0,
-  })
+  -- 获取光标位置
+  local cursor = vim.api.nvim_win_get_cursor(0)
+  local cursor_row = cursor[1] - 1
 
-  -- 2. 隐藏最后一行（```），用空格遮挡整行，背景色补全到窗口宽度
-  local last_line = lines[#lines] or ""
-  vim.api.nvim_buf_set_extmark(bufnr, namespace, end_row - 1, 0, {
-    virt_text = { { string.rep(" ", win_width), codeblock_hl } },
-    virt_text_pos = "overlay",
-    hl_mode = "combine",
-    priority = 0,
-  })
+  -- 1. 第一行（```xxx）
+  if cursor_row == start_row then
+    -- 光标在第一行，显示原文，只加背景色
+    local line_content = lines[1] or ""
+    local line_len = vim.fn.strdisplaywidth(line_content)
+    local win_width = vim.api.nvim_win_get_width(0)
+    vim.api.nvim_buf_set_extmark(bufnr, namespace, start_row, 0, {
+      end_line = start_row,
+      end_col = #line_content,
+      hl_group = codeblock_hl,
+      priority = 0,
+    })
+    if line_len < win_width then
+      vim.api.nvim_buf_set_extmark(bufnr, namespace, start_row, line_len, {
+        virt_text = { { string.rep(" ", win_width - line_len), codeblock_hl } },
+        virt_text_pos = "overlay",
+        hl_mode = "combine",
+        priority = 0,
+      })
+    end
+  else
+    -- 光标不在第一行，遮挡原文
+    local win_width = vim.api.nvim_win_get_width(0)
+    vim.api.nvim_buf_set_extmark(bufnr, namespace, start_row, 0, {
+      virt_text = { { string.rep(" ", win_width), codeblock_hl } },
+      virt_text_pos = "overlay",
+      hl_mode = "combine",
+      priority = 0,
+    })
+  end
+
+  -- 2. 最后一行（```）
+  if cursor_row == end_row - 1 then
+    -- 光标在最后一行，显示原文，只加背景色
+    local last_line = lines[#lines] or ""
+    local line_len = vim.fn.strdisplaywidth(last_line)
+    local win_width = vim.api.nvim_win_get_width(0)
+    vim.api.nvim_buf_set_extmark(bufnr, namespace, end_row - 1, 0, {
+      end_line = end_row - 1,
+      end_col = #last_line,
+      hl_group = codeblock_hl,
+      priority = 0,
+    })
+    if line_len < win_width then
+      vim.api.nvim_buf_set_extmark(bufnr, namespace, end_row - 1, line_len, {
+        virt_text = { { string.rep(" ", win_width - line_len), codeblock_hl } },
+        virt_text_pos = "overlay",
+        hl_mode = "combine",
+        priority = 0,
+      })
+    end
+  else
+    -- 光标不在最后一行，遮挡原文
+    local win_width = vim.api.nvim_win_get_width(0)
+    vim.api.nvim_buf_set_extmark(bufnr, namespace, end_row - 1, 0, {
+      virt_text = { { string.rep(" ", win_width), codeblock_hl } },
+      virt_text_pos = "overlay",
+      hl_mode = "combine",
+      priority = 0,
+    })
+  end
 
   -- 3. 给代码块内容（中间行）只设置背景色，不影响语法高亮
   for i = start_row + 1, end_row - 2 do
@@ -441,6 +489,7 @@ render.code_block = function(rc)
     -- 如果内容行宽度小于窗口宽度，补全背景色到整行
     local line_content = lines[i - start_row + 1] or ""
     local line_len = vim.fn.strdisplaywidth(line_content)
+    local win_width = vim.api.nvim_win_get_width(0)
     if line_len < win_width then
       vim.api.nvim_buf_set_extmark(bufnr, namespace, i, line_len, {
         virt_text = { { string.rep(" ", win_width - line_len), codeblock_hl } },
