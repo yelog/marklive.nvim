@@ -149,9 +149,9 @@ render.init = function(namespace, config, query, regex_list)
           hl_group = hl_group, -- use_name
           priority = 0,        -- To ignore conceal hl_group when focused
         })
-        -- 通用 after_highlight 支持：如果配置了 after_highlight，则对匹配项后到行尾应用该高亮
+        -- 通用 after_highlight 支持：只有 after_highlight 显式配置且不为 nil/false 时才应用
         local after_hl = config.render[name].after_highlight
-        if after_hl then
+        if after_hl ~= nil and after_hl ~= false then
           local line_content = vim.api.nvim_buf_get_lines(bufnr, start_row, start_row + 1, false)[1] or ""
           local after_col = end_col
           local hl_group_to_use = after_hl

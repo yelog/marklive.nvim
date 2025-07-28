@@ -13,6 +13,17 @@ M.setup = function(config)
   config = config or {}
   M.config = vim.tbl_deep_extend("force", M.config, config)
 
+  -- 处理 render 配置中的 after_highlight 覆盖问题
+  if config.render then
+    for name, user_render in pairs(config.render) do
+      if user_render.after_highlight == nil then
+        if M.config.render[name] then
+          M.config.render[name].after_highlight = nil
+        end
+      end
+    end
+  end
+
   -- generate query and regex
   local generate_result = utils.generate_query_regex(M.config.render)
   query = generate_result.query
