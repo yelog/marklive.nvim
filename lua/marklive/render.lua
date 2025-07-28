@@ -417,11 +417,11 @@ render.code_block = function(rc)
   local cursor_row = cursor[1] - 1
 
   -- 1. 第一行（```xxx）
+  local win_width = vim.api.nvim_win_get_width(0)
   if cursor_row == start_row then
     -- 光标在第一行，显示原文，只加背景色
     local line_content = lines[1] or ""
     local line_len = vim.fn.strdisplaywidth(line_content)
-    local win_width = vim.api.nvim_win_get_width(0)
     vim.api.nvim_buf_set_extmark(bufnr, namespace, start_row, 0, {
       end_line = start_row,
       end_col = #line_content,
@@ -438,12 +438,24 @@ render.code_block = function(rc)
     end
   else
     -- 光标不在第一行，遮挡原文
-    local win_width = vim.api.nvim_win_get_width(0)
     vim.api.nvim_buf_set_extmark(bufnr, namespace, start_row, 0, {
       virt_text = { { string.rep(" ", win_width), codeblock_hl } },
       virt_text_pos = "overlay",
       hl_mode = "combine",
       priority = 0,
+    })
+  end
+
+  -- 在代码块第一行右上角显示语言类型（如 lua），不超过窗口宽度
+  if lang and lang ~= "" then
+    local lang_label = " " .. lang .. " "
+    local label_len = vim.fn.strdisplaywidth(lang_label)
+    -- 直接使用 right_align，col 设置为 0，避免 col 越界
+    vim.api.nvim_buf_set_extmark(bufnr, namespace, start_row, 0, {
+      virt_text = { { lang_label, codeblock_hl } },
+      virt_text_pos = "right_align",
+      hl_mode = "combine",
+      priority = 10,
     })
   end
 
