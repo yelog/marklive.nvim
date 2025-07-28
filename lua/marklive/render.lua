@@ -149,6 +149,26 @@ render.init = function(namespace, config, query, regex_list)
           hl_group = hl_group, -- use_name
           priority = 0,        -- To ignore conceal hl_group when focused
         })
+        -- 通用 after_highlight 支持：如果配置了 after_highlight，则对匹配项后到行尾应用该高亮
+        local after_hl = config.render[name].after_highlight
+        if after_hl then
+          local line_content = vim.api.nvim_buf_get_lines(bufnr, start_row, start_row + 1, false)[1] or ""
+          local after_col = end_col
+          local hl_group_to_use = after_hl
+          if type(after_hl) == "table" then
+            local group_name = "MarkliveAfterHighlight_" .. name
+            vim.api.nvim_set_hl(0, group_name, after_hl)
+            hl_group_to_use = group_name
+          end
+          if after_col < #line_content then
+            vim.api.nvim_buf_set_extmark(bufnr, namespace, start_row, after_col, {
+              end_line = start_row,
+              end_col = #line_content,
+              hl_group = hl_group_to_use,
+              priority = 1,
+            })
+          end
+        end
       end
       local fill_content = ' '
       if config.render[name].hl_fill then

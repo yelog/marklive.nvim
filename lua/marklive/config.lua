@@ -113,7 +113,8 @@ return {
       icon = '󰄲',
       highlight = {
         fg = "#009f4d",
-      }
+      },
+      after_highlight = { fg = "#939393", strikethrough = true }
     },
     task_list_marker_indeterminate = { -- Task list marker indeterminate
       icon = '󰡖',
