@@ -213,14 +213,15 @@ return {
       whole_line = true,
       hl_group = "markdownRule",
     },
-    -- code_block = { -- Code block
-    --   icon = "",
-    --   query = { "(fenced_code_block) @code_block",
-    --     "(indented_code_block) @code_block" },
-    --   -- regex = "(```)([.\n]-)(```)",
-    --   hl_fill = true,
-    --   hl_group = 'MarkliveCodeblock'
-    -- },
+    code_block = { -- Code block
+      icon = "",
+      query = { "(fenced_code_block) @code_block",
+        "(indented_code_block) @code_block" },
+      -- regex = "(```)([.\n]-)(```)",
+      hl_fill = true,
+      hl_group = 'MarkliveCodeblock',
+      render = 'code_block'
+    },
     block_quote_marker = { -- Block quote
       -- icon = "┃",
       icon = "▋",

@@ -103,8 +103,8 @@ render.init = function(namespace, config, query, regex_list)
     local line_length = #line
     local icon_padding = config.render[name].icon_padding
 
-    -- 检查是否在代码块内，如果是则跳过渲染
-    if is_in_codeblock(bufnr, start_row) then
+    -- 仅对非 code_block 类型才跳过代码块内的渲染
+    if name ~= "code_block" and is_in_codeblock(bufnr, start_row) then
       goto continue_query
     end
 
@@ -393,10 +393,63 @@ render.table = function(rc)
   }))
 end
 
--- 用于渲染 markdown 表格分隔行（如 |---|---|），用连线替换
-render.table_delimiter_row = function(rc)
-  -- 交由 render.table 统一渲染分隔线，这里不做任何处理
-  return
+-- 用于渲染 markdown 代码块
+---@param rc table
+render.code_block = function(rc)
+  -- 高亮组定义
+  local codeblock_hl = "MarkliveCodeblock"
+  vim.api.nvim_set_hl(0, codeblock_hl, { bg = "#24283B" })
+
+  local bufnr = rc.bufnr
+  local namespace = rc.namespace
+  local start_row = rc.start_row
+  local end_row = rc.end_row
+  local lines = vim.api.nvim_buf_get_lines(bufnr, start_row, end_row, false)
+  local filetype = nil
+
+  -- 检查第一行是否为 ```xxx，提取语法类型
+  local first_line = lines[1] or ""
+  local lang = first_line:match("^%s*```(%w+)")
+  if not lang then lang = "" end
+
+  -- 1. 隐藏第一行（```xxx），用空格遮挡整行，背景色补全到窗口宽度
+  local win_width = vim.api.nvim_win_get_width(0)
+  vim.api.nvim_buf_set_extmark(bufnr, namespace, start_row, 0, {
+    virt_text = { { string.rep(" ", win_width), codeblock_hl } },
+    virt_text_pos = "overlay",
+    hl_mode = "combine",
+    priority = 0,
+  })
+
+  -- 2. 隐藏最后一行（```），用空格遮挡整行，背景色补全到窗口宽度
+  local last_line = lines[#lines] or ""
+  vim.api.nvim_buf_set_extmark(bufnr, namespace, end_row - 1, 0, {
+    virt_text = { { string.rep(" ", win_width), codeblock_hl } },
+    virt_text_pos = "overlay",
+    hl_mode = "combine",
+    priority = 0,
+  })
+
+  -- 3. 给代码块内容（中间行）只设置背景色，不影响语法高亮
+  for i = start_row + 1, end_row - 2 do
+    vim.api.nvim_buf_set_extmark(bufnr, namespace, i, 0, {
+      end_line = i,
+      end_col = #lines[i - start_row + 1] or 0,
+      hl_group = codeblock_hl,
+      priority = 0,
+    })
+    -- 如果内容行宽度小于窗口宽度，补全背景色到整行
+    local line_content = lines[i - start_row + 1] or ""
+    local line_len = vim.fn.strdisplaywidth(line_content)
+    if line_len < win_width then
+      vim.api.nvim_buf_set_extmark(bufnr, namespace, i, line_len, {
+        virt_text = { { string.rep(" ", win_width - line_len), codeblock_hl } },
+        virt_text_pos = "overlay",
+        hl_mode = "combine",
+        priority = 0,
+      })
+    end
+  end
 end
 
 render.table_normal_cell = function(rc)
