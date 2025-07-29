@@ -299,27 +299,58 @@ render.table = function(rc)
   local middle_border = make_border_row(border[4], border[5], border[6])
   local bottom_border = make_border_row(border[7], border[8], border[9])
 
-  -- 对表格单元格内容做 markdown 语法符号隐藏和高亮
+  -- 根据 config.render 配置动态处理 markdown 行内符号隐藏和分段高亮
   local function conceal_markdown_cell(cell, bufnr, row_idx, col_idx, config)
-    -- 补全所有常见 markdown 行内符号的隐藏
-    -- **bold**, _italic_, ~~strikethrough~~, `inline code`, <u>underline</u>, <mark>highlight</mark>
-    local new_cell = cell
+    -- 返回形如 { {text, hl_group}, ... }
+    local patterns = {
+      -- 优先使用 config.render 里的 regex 配置
+      -- 格式: { pattern, hl_group }
+      -- pattern 必须带捕获组
+    }
+    -- 兜底：常见语法
+    table.insert(patterns, { "(`)(.-)(`)", "markdownCode" })
+    table.insert(patterns, { "(%*%*)(.-)(%*%*)", "markdownBold" })
+    table.insert(patterns, { "(_)(.-)(_)", "markdownItalic" })
+    table.insert(patterns, { "(~~)(.-)(~~)", "markdownStrike" })
+    table.insert(patterns, { "(<u>)(.-)(</u>)", nil })
+    table.insert(patterns, { "(<mark>)(.-)(</mark>)", nil })
+    table.insert(patterns, { "(<b>)(.-)(</b>)", "markdownBold" })
 
-    -- 加粗 **bold**
-    new_cell = new_cell:gsub("%*%*([^%*]+)%*%*", "%1")
-    -- 斜体 _italic_ 或 *italic*
-    new_cell = new_cell:gsub("%_([^%_]+)%_", "%1")
-    new_cell = new_cell:gsub("%*([^%*]+)%*", "%1")
-    -- 删除线 ~~strikethrough~~
-    new_cell = new_cell:gsub("~~(.-)~~", "%1")
-    -- 行内代码 `inline code`
-    new_cell = new_cell:gsub("`([^`]+)`", "%1")
-    -- 下划线 <u>underline</u>
-    new_cell = new_cell:gsub("<u>(.-)</u>", "%1")
-    -- 高亮 <mark>highlight</mark>
-    new_cell = new_cell:gsub("<mark>(.-)</mark>", "%1")
+    -- 递归分段（修正高亮范围问题，优先最长匹配，避免嵌套错乱）
+    local function split_segments(str, pat_idx)
+      if pat_idx > #patterns then
+        return { { str } }
+      end
+      local pattern, hl_group = patterns[pat_idx][1], patterns[pat_idx][2]
+      local res = {}
+      local last_end = 1
+      local found = false
+      while true do
+        local s, e, left, mid, right = str:find(pattern, last_end)
+        if not s then break end
+        found = true
+        if s > last_end then
+          -- 前段
+          local before = str:sub(last_end, s - 1)
+          vim.list_extend(res, split_segments(before, pat_idx + 1))
+        end
+        -- 中间内容
+        if mid and #mid > 0 then
+          table.insert(res, { mid, hl_group })
+        end
+        last_end = e + 1
+      end
+      if found and last_end <= #str then
+        local after = str:sub(last_end)
+        vim.list_extend(res, split_segments(after, pat_idx + 1))
+      elseif not found then
+        -- 如果本 pattern 没有匹配，递归下一个 pattern
+        return split_segments(str, pat_idx + 1)
+      end
+      return res
+    end
 
-    return new_cell
+    return split_segments(cell, 1)
   end
 
   -- 构造内容行
@@ -328,13 +359,27 @@ render.table = function(rc)
     table.insert(row, { border[10], border_hl })
     for i = 1, col_count do
       local cell = row_cells[i] or ""
-      -- 对 cell 做 markdown 语法符号隐藏
-      cell = conceal_markdown_cell(cell, bufnr, i, i, config)
-      local pad = column_max_width[i] - vim.fn.strdisplaywidth(cell)
+      -- 对 cell 做 markdown 语法符号隐藏和分段高亮
+      local segments = conceal_markdown_cell(cell, bufnr, i, i, config)
+      -- 计算内容宽度
+      local cell_width = 0
+      for _, seg in ipairs(segments) do
+        cell_width = cell_width + vim.fn.strdisplaywidth(seg[1])
+      end
+      local pad = column_max_width[i] - cell_width
+      -- 拼接分段
       if is_header then
-        table.insert(row, { " " .. cell .. string.rep(" ", pad + 1), header_hl })
+        table.insert(row, { " ", header_hl })
+        for _, seg in ipairs(segments) do
+          table.insert(row, { seg[1], seg[2] or header_hl })
+        end
+        table.insert(row, { string.rep(" ", pad + 1), header_hl })
       else
-        table.insert(row, { " " .. cell .. string.rep(" ", pad + 1) })
+        table.insert(row, { " " })
+        for _, seg in ipairs(segments) do
+          table.insert(row, { seg[1], seg[2] })
+        end
+        table.insert(row, { string.rep(" ", pad + 1) })
       end
       table.insert(row, { border[10], border_hl })
     end

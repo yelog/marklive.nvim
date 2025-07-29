@@ -164,18 +164,6 @@ return {
       regex = "(!)%[[^%[%]]-%](%(.-%))",
       hl_group = 'markdownLinkText',
     },
-    -- table_delimiter_row = {
-    --   hl_group = 'tableSeparator',
-    --   query = { "(pipe_table_delimiter_row) @table_delimiter_row" },
-    --   render = 'table_delimiter_row'
-    -- },
-    -- table_normal_cell = {
-    --   icon = '│',
-    --   query = { "(pipe_table_header (pipe_table_cell) @table_normal_cell)",
-    --     "(pipe_table_row (pipe_table_cell) @table_normal_cell)" },
-    --   hl_group = 'tableBorder',
-    --   render = 'table_normal_cell',
-    -- },
     pipe_table = {
       icon = '│',
       hl_group = 'tableBorder',
