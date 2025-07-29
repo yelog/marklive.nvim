@@ -299,12 +299,37 @@ render.table = function(rc)
   local middle_border = make_border_row(border[4], border[5], border[6])
   local bottom_border = make_border_row(border[7], border[8], border[9])
 
+  -- 对表格单元格内容做 markdown 语法符号隐藏和高亮
+  local function conceal_markdown_cell(cell, bufnr, row_idx, col_idx, config)
+    -- 补全所有常见 markdown 行内符号的隐藏
+    -- **bold**, _italic_, ~~strikethrough~~, `inline code`, <u>underline</u>, <mark>highlight</mark>
+    local new_cell = cell
+
+    -- 加粗 **bold**
+    new_cell = new_cell:gsub("%*%*([^%*]+)%*%*", "%1")
+    -- 斜体 _italic_ 或 *italic*
+    new_cell = new_cell:gsub("%_([^%_]+)%_", "%1")
+    new_cell = new_cell:gsub("%*([^%*]+)%*", "%1")
+    -- 删除线 ~~strikethrough~~
+    new_cell = new_cell:gsub("~~(.-)~~", "%1")
+    -- 行内代码 `inline code`
+    new_cell = new_cell:gsub("`([^`]+)`", "%1")
+    -- 下划线 <u>underline</u>
+    new_cell = new_cell:gsub("<u>(.-)</u>", "%1")
+    -- 高亮 <mark>highlight</mark>
+    new_cell = new_cell:gsub("<mark>(.-)</mark>", "%1")
+
+    return new_cell
+  end
+
   -- 构造内容行
   local function make_content_row(row_cells, is_header)
     local row = {}
     table.insert(row, { border[10], border_hl })
     for i = 1, col_count do
       local cell = row_cells[i] or ""
+      -- 对 cell 做 markdown 语法符号隐藏
+      cell = conceal_markdown_cell(cell, bufnr, i, i, config)
       local pad = column_max_width[i] - vim.fn.strdisplaywidth(cell)
       if is_header then
         table.insert(row, { " " .. cell .. string.rep(" ", pad + 1), header_hl })
