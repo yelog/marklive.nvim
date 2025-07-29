@@ -176,7 +176,8 @@ return {
     },
     italic = { -- Italic
       hl_group = "markdownItalic",
-      regex = "([_])[^_]-([_])",
+      -- Use lookbehind and lookahead to ensure _ is not surrounded by letters
+      regex = "[^%a](_)[^_%s][^_]*(_)[^%a]",
     },
     bolder = { -- bolder
       icon = '',
