@@ -1,6 +1,7 @@
 local default_config = require('marklive.config')
 local utils = require('marklive.utils')
 local render = require('marklive.render')
+require('marklive.action')
 local M = {}
 -- treesitter query
 local query = ""

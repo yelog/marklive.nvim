@@ -277,4 +277,10 @@ return {
       regex = " (@)[^@ ]+",
     }
   },
+  action = {
+    task = {
+      -- 层级关系
+      hierarchy = true
+    }
+  }
 }
