@@ -14,7 +14,7 @@ M.setup = function(config)
   config = config or {}
   M.config = vim.tbl_deep_extend("force", M.config, config)
 
-  -- 处理 render 配置中的 after_highlight 覆盖问题
+  -- Handle after_highlight override in render config
   if config.render then
     for name, user_render in pairs(config.render) do
       if user_render.after_highlight == nil then
@@ -99,18 +99,18 @@ end
 -- register vim command
 vim.api.nvim_create_user_command("MarkliveEnable", function()
   require('marklive').render()
-end, { desc = "启用 Marklive 渲染" })
+end, { desc = "Enable Marklive rendering" })
 
 vim.api.nvim_create_user_command("MarkliveDisable", function()
   require('marklive').disable()
-end, { desc = "禁用 Marklive 渲染" })
+end, { desc = "Disable Marklive rendering" })
 
 vim.api.nvim_create_user_command("MarkliveToggle", function()
   require('marklive').toggle()
-end, { desc = "切换 Marklive 渲染" })
+end, { desc = "Toggle Marklive rendering" })
 
 vim.api.nvim_create_user_command("MarkliveTaskToggle", function()
   require("marklive.action").toggle_task()
-end, { desc = "切换 markdown 任务状态" })
+end, { desc = "Toggle markdown task state" })
 
 return M
