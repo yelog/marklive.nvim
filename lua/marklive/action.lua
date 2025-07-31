@@ -98,13 +98,13 @@ local function update_parent_state(lines, idx)
       break
     end
 
-    -- 检查父任务的所有直接子任务状态
+    -- 检查父任务的所有直接子任务状态（只要缩进大于父任务即可视为子任务）
     local child_states = { checked = 0, unchecked = 0, halfchecked = 0, total = 0 }
     for j = parent_idx + 1, #lines do
       local l = lines[j]
       local l_indent = get_indent(l)
       if l_indent <= parent_indent then break end
-      if is_task_line(l) and l_indent == parent_indent + 2 then
+      if is_task_line(l) then
         if is_task_checked(l) then
           child_states.checked = child_states.checked + 1
         elseif is_task_unchecked(l) then
@@ -170,27 +170,27 @@ function M.toggle_task()
 
   -- 层级模式
   local cur_indent = get_indent(line)
+  local changed = false
   if is_task_unchecked(line) or is_task_halfchecked(line) then
     -- 选中当前任务和所有子任务
     lines[row + 1] = set_task_state(line, "checked")
     set_children_state(lines, row + 1, cur_indent, "checked")
-    update_parent_state(lines, row + 1)
+    changed = true
   elseif is_task_checked(line) then
     -- 取消选中当前任务和所有子任务
     lines[row + 1] = set_task_state(line, "unchecked")
     set_children_state(lines, row + 1, cur_indent, "unchecked")
-    update_parent_state(lines, row + 1)
+    changed = true
   else
     vim.notify("当前行不是可切换的任务或列表", vim.log.levels.INFO)
     return
   end
 
   -- 写回所有变更行
-  vim.api.nvim_buf_set_lines(0, 0, -1, false, lines)
-
-  -- 变更子任务后，自动向上递归更新父任务状态
-  if hierarchy then
+  if changed then
+    -- 先递归向上更新父任务状态（无论是批量操作还是单个子任务变更都能生效）
     update_parent_state(lines, row + 1)
+    -- 最后统一写入 buffer
     vim.api.nvim_buf_set_lines(0, 0, -1, false, lines)
   end
 end
