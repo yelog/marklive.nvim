@@ -632,11 +632,14 @@ vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
     local cursor = vim.api.nvim_win_get_cursor(0)
     local cursor_row = cursor[1] - 1
     local cleared = false
+    local line_count = vim.api.nvim_buf_line_count(bufnr)
     for _, tbl in ipairs(table_ranges) do
       local in_table = cursor_row >= tbl.start_row and cursor_row < tbl.end_row
       if in_table then
-        -- 只清除当前表格的渲染
-        vim.api.nvim_buf_clear_namespace(tbl.bufnr, tbl.namespace, tbl.start_row - 1, tbl.end_row + 1)
+        -- 只清除当前表格的渲染，确保行号不越界
+        local start_row = math.max(0, math.min(tbl.start_row - 1, line_count - 1))
+        local end_row = math.max(0, math.min(tbl.end_row + 1, line_count))
+        vim.api.nvim_buf_clear_namespace(tbl.bufnr, tbl.namespace, start_row, end_row)
         cleared = true
       end
     end
