@@ -80,9 +80,9 @@ require('marklive').setup({
 
 ### Keymap Example
 
-You can bind a shortcut to toggle the task state, for example, using `<c-l>` in normal mode:
+You can bind a shortcut to toggle the task state, for example, using `<CR>` (Enter) in normal mode:
 ```lua
-vim.keymap.set("n", "<c-l>", "<cmd>MarkliveTaskToggle<cr>", { desc = "Toggle markdown task" })
+vim.keymap.set("n", "<CR>", "<cmd>MarkliveTaskToggle<cr>", { desc = "Toggle markdown task" })
 ```
 
 If you don't want to use a Nerd Font, you can replace the icons with Unicode symbols.
