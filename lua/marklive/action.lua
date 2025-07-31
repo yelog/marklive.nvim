@@ -100,11 +100,13 @@ local function update_parent_state(lines, idx)
 
     -- 检查父任务的所有直接子任务状态（只要缩进大于父任务即可视为子任务）
     local child_states = { checked = 0, unchecked = 0, halfchecked = 0, total = 0 }
+    local has_task_child = false
     for j = parent_idx + 1, #lines do
       local l = lines[j]
       local l_indent = get_indent(l)
       if l_indent <= parent_indent then break end
       if is_task_line(l) then
+        has_task_child = true
         if is_task_checked(l) then
           child_states.checked = child_states.checked + 1
         elseif is_task_unchecked(l) then
@@ -113,9 +115,14 @@ local function update_parent_state(lines, idx)
           child_states.halfchecked = child_states.halfchecked + 1
         end
         child_states.total = child_states.total + 1
+      elseif is_plain_list(l) then
+        -- 普通列表也算作未完成
+        has_task_child = true
+        child_states.unchecked = child_states.unchecked + 1
+        child_states.total = child_states.total + 1
       end
     end
-    if child_states.total > 0 then
+    if has_task_child and child_states.total > 0 then
       if child_states.checked == child_states.total then
         lines[parent_idx] = set_task_state(lines[parent_idx], "checked")
       elseif child_states.unchecked == child_states.total then
@@ -123,6 +130,10 @@ local function update_parent_state(lines, idx)
       else
         lines[parent_idx] = set_task_state(lines[parent_idx], "halfchecked")
       end
+    elseif not has_task_child then
+      -- 父任务本身是 task，但没有任何子任务，保持原状态
+      -- 但如果父任务是 checked，且有子任务变为未完成，则应变为 halfchecked
+      -- 这里无需处理，因无子任务
     end
 
     -- 继续向上递归
@@ -150,8 +161,18 @@ function M.toggle_task()
     -- 普通 list，添加 [ ]
     new_line = line:gsub("^(%s*[-*+]%s+)", "%1[ ] ")
     lines[row + 1] = new_line
-    vim.api.nvim_buf_set_lines(0, row, row + 1, false, { new_line })
-    return
+    -- 这里不直接 return，而是继续向下走，保证父任务能被递归更新
+    -- changed = true 以便后续 update_parent_state
+    local config = get_config()
+    local hierarchy = config.action and config.action.task and config.action.task.hierarchy
+    if hierarchy then
+      update_parent_state(lines, row + 1)
+      vim.api.nvim_buf_set_lines(0, 0, -1, false, lines)
+      return
+    else
+      vim.api.nvim_buf_set_lines(0, row, row + 1, false, { new_line })
+      return
+    end
   end
 
   if not hierarchy then
