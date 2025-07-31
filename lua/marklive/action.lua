@@ -145,7 +145,7 @@ end
 -- 切换任务状态
 function M.toggle_task()
   if not is_markdown() then
-    vim.notify("MarkliveToggleTask 只适用于 markdown 文件", vim.log.levels.WARN)
+    vim.notify("MarkliveTaskToggle 只适用于 markdown 文件", vim.log.levels.WARN)
     return
   end
 
@@ -215,10 +215,5 @@ function M.toggle_task()
     vim.api.nvim_buf_set_lines(0, 0, -1, false, lines)
   end
 end
-
--- 注册命令
-vim.api.nvim_create_user_command("MarkliveToggleTask", function()
-  require("marklive.action").toggle_task()
-end, { desc = "切换 markdown 任务状态" })
 
 return M

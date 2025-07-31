@@ -97,8 +97,20 @@ M.toggle = function()
 end
 
 -- register vim command
-vim.api.nvim_command [[command! MarkliveEnable lua require('marklive').render()]]
-vim.api.nvim_command [[command! MarkliveDisable lua require('marklive').disable()]]
-vim.api.nvim_command [[command! MarkliveToggle lua require('marklive').toggle()]]
+vim.api.nvim_create_user_command("MarkliveEnable", function()
+  require('marklive').render()
+end, { desc = "启用 Marklive 渲染" })
+
+vim.api.nvim_create_user_command("MarkliveDisable", function()
+  require('marklive').disable()
+end, { desc = "禁用 Marklive 渲染" })
+
+vim.api.nvim_create_user_command("MarkliveToggle", function()
+  require('marklive').toggle()
+end, { desc = "切换 Marklive 渲染" })
+
+vim.api.nvim_create_user_command("MarkliveTaskToggle", function()
+  require("marklive.action").toggle_task()
+end, { desc = "切换 markdown 任务状态" })
 
 return M
