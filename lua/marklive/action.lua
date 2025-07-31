@@ -116,12 +116,13 @@ local function update_parent_state(lines, idx)
         end
         child_states.total = child_states.total + 1
       elseif is_plain_list(l) then
-        -- Plain list also counts as unchecked
+        -- Plain list只计数，不计入total
         has_task_child = true
-        child_states.unchecked = child_states.unchecked + 1
-        child_states.total = child_states.total + 1
+        -- child_states.unchecked = child_states.unchecked + 1
+        -- child_states.total = child_states.total + 1
       end
     end
+    -- 修正：只统计实际的任务子项（total>0），plain list不计入total
     if has_task_child and child_states.total > 0 then
       if child_states.checked == child_states.total then
         lines[parent_idx] = set_task_state(lines[parent_idx], "checked")
