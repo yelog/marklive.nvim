@@ -143,7 +143,7 @@ local function update_parent_state(lines, idx)
   end
 end
 
--- Toggle task state
+-- Toggle task state (支持 normal 和 visual 模式)
 function M.toggle_task()
   if not is_markdown() then
     vim.notify("MarkliveTaskToggle is only available for markdown files", vim.log.levels.WARN)
@@ -153,67 +153,97 @@ function M.toggle_task()
   local config = get_config()
   local hierarchy = config.action and config.action.task and config.action.task.hierarchy
 
-  local row = vim.api.nvim_win_get_cursor(0)[1] - 1
+  -- 检查是否为 visual 模式
+  local mode = vim.fn.mode()
   local lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-  local line = lines[row + 1]
-  local new_line = line
+  local changed_rows = {}
 
-  if is_plain_list(line) then
-    -- Plain list, add [ ]
-    new_line = line:gsub("^(%s*[-*+]%s+)", "%1[ ] ")
-    lines[row + 1] = new_line
-    -- Do not return directly, continue to update parent tasks recursively
-    -- changed = true for later update_parent_state
-    local config = get_config()
-    local hierarchy = config.action and config.action.task and config.action.task.hierarchy
-    if hierarchy then
-      update_parent_state(lines, row + 1)
-      vim.api.nvim_buf_set_lines(0, 0, -1, false, lines)
+  local function process_line(row)
+    local line = lines[row + 1]
+    local new_line = line
+
+    if is_plain_list(line) then
+      -- Plain list, add [ ]
+      new_line = line:gsub("^(%s*[-*+]%s+)", "%1[ ] ")
+      lines[row + 1] = new_line
+      table.insert(changed_rows, row + 1)
       return
+    end
+
+    if not hierarchy then
+      -- 非层级模式
+      if is_task_unchecked(line) or is_task_halfchecked(line) then
+        new_line = set_task_state(line, "checked")
+      elseif is_task_checked(line) then
+        new_line = line:gsub("^(%s*[-*+]%s+)%[[xX]%]%s*", "%1")
+      else
+        return
+      end
+      lines[row + 1] = new_line
+      table.insert(changed_rows, row + 1)
+      return
+    end
+
+    -- 层级模式
+    local cur_indent = get_indent(line)
+    local changed = false
+    if is_task_unchecked(line) or is_task_halfchecked(line) then
+      lines[row + 1] = set_task_state(line, "checked")
+      set_children_state(lines, row + 1, cur_indent, "checked")
+      changed = true
+    elseif is_task_checked(line) then
+      lines[row + 1] = set_task_state(line, "unchecked")
+      set_children_state(lines, row + 1, cur_indent, "unchecked")
+      changed = true
     else
-      vim.api.nvim_buf_set_lines(0, row, row + 1, false, { new_line })
       return
+    end
+    if changed then
+      table.insert(changed_rows, row + 1)
     end
   end
 
-  if not hierarchy then
-    -- Non-hierarchical mode, original logic
-    if is_task_unchecked(line) or is_task_halfchecked(line) then
-      new_line = set_task_state(line, "checked")
-    elseif is_task_checked(line) then
-      new_line = line:gsub("^(%s*[-*+]%s+)%[[xX]%]%s*", "%1")
+  if mode == "v" or mode == "V" or mode == "\22" then
+    -- visual 模式
+    local start_row, end_row
+    if vim.fn.line("v") < vim.fn.line(".") then
+      start_row = vim.fn.line("v") - 1
+      end_row = vim.fn.line(".") - 1
     else
+      start_row = vim.fn.line(".") - 1
+      end_row = vim.fn.line("v") - 1
+    end
+    for row = start_row, end_row do
+      process_line(row)
+    end
+    -- 层级模式下需要递归更新父任务
+    if hierarchy then
+      for _, row in ipairs(changed_rows) do
+        update_parent_state(lines, row)
+      end
+      vim.api.nvim_buf_set_lines(0, 0, -1, false, lines)
+    else
+      -- 非层级模式只更新选中行
+      for _, row in ipairs(changed_rows) do
+        vim.api.nvim_buf_set_lines(0, row - 1, row, false, { lines[row] })
+      end
+    end
+    return
+  else
+    -- normal 模式
+    local row = vim.api.nvim_win_get_cursor(0)[1] - 1
+    process_line(row)
+    if #changed_rows == 0 then
       vim.notify("Current line is not a toggleable task or list", vim.log.levels.INFO)
       return
     end
-    vim.api.nvim_buf_set_lines(0, row, row + 1, false, { new_line })
+    if hierarchy then
+      update_parent_state(lines, row + 1)
+      vim.api.nvim_buf_set_lines(0, 0, -1, false, lines)
+    else
+      vim.api.nvim_buf_set_lines(0, row, row + 1, false, { lines[row + 1] })
+    end
     return
-  end
-
-  -- Hierarchical mode
-  local cur_indent = get_indent(line)
-  local changed = false
-  if is_task_unchecked(line) or is_task_halfchecked(line) then
-    -- Check current task and all children
-    lines[row + 1] = set_task_state(line, "checked")
-    set_children_state(lines, row + 1, cur_indent, "checked")
-    changed = true
-  elseif is_task_checked(line) then
-    -- Uncheck current task and all children
-    lines[row + 1] = set_task_state(line, "unchecked")
-    set_children_state(lines, row + 1, cur_indent, "unchecked")
-    changed = true
-  else
-    vim.notify("Current line is not a toggleable task or list", vim.log.levels.INFO)
-    return
-  end
-
-  -- Write back all changed lines
-  if changed then
-    -- Recursively update parent task state (works for both batch and single child changes)
-    update_parent_state(lines, row + 1)
-    -- Finally write to buffer
-    vim.api.nvim_buf_set_lines(0, 0, -1, false, lines)
   end
 end
 
