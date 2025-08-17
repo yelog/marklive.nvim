@@ -488,6 +488,7 @@ render.code_block = function(rc)
 
   -- 1. 第一行（```xxx）
   local win_width = vim.api.nvim_win_get_width(0)
+  -- 兼容：无论有无表格，首尾行只要光标在上面都显示原文
   if cursor_row == start_row then
     -- 光标在第一行，显示原文，只加背景色
     local line_content = lines[1] or ""
@@ -631,7 +632,6 @@ vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
   callback = function()
     local bufnr = vim.api.nvim_get_current_buf()
     local table_ranges = table_ranges_by_buf[bufnr] or {}
-    if #table_ranges == 0 then return end
     local cursor = vim.api.nvim_win_get_cursor(0)
     local cursor_row = cursor[1] - 1
     local cleared = false
@@ -646,8 +646,8 @@ vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
         cleared = true
       end
     end
+    -- 无论有无表格，只要没有清除，就重新渲染
     if not cleared then
-      -- 光标不在任何表格内，重新渲染所有表格
       if render.last_namespace and render.last_config and render.last_query and render.last_regex_list then
         require('marklive.render').init(render.last_namespace, render.last_config, render.last_query, render.last_regex_list)
       end
@@ -675,10 +675,11 @@ render.init = function(namespace, config, query, regex_list)
   render.last_regex_list = regex_list
   render.last_namespace = namespace
   render.last_config = config
-  -- 渲染前清空当前 buffer 的表格信息
-  local bufnr = vim.api.nvim_get_current_buf()
-  table_ranges_by_buf[bufnr] = {}
+  -- 不要清空 table_ranges_by_buf[bufnr]，否则会导致 has_table 判断失效
   _orig_init(namespace, config, query, regex_list)
 end
+
+-- 让 code_block 能访问表格信息
+render._table_ranges_by_buf = table_ranges_by_buf
 
 return render
