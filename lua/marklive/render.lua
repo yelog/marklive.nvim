@@ -492,14 +492,15 @@ render.code_block = function(rc)
     -- 光标在第一行，显示原文，只加背景色
     local line_content = lines[1] or ""
     local line_len = vim.fn.strdisplaywidth(line_content)
+    local line_byte_len = string.len(line_content)
     vim.api.nvim_buf_set_extmark(bufnr, namespace, start_row, 0, {
       end_line = start_row,
-      end_col = #line_content,
+      end_col = line_byte_len,
       hl_group = codeblock_hl,
       priority = 0,
     })
     if line_len < win_width then
-      vim.api.nvim_buf_set_extmark(bufnr, namespace, start_row, line_len, {
+      vim.api.nvim_buf_set_extmark(bufnr, namespace, start_row, line_byte_len, {
         virt_text = { { string.rep(" ", win_width - line_len), codeblock_hl } },
         virt_text_pos = "overlay",
         hl_mode = "combine",
@@ -535,14 +536,15 @@ render.code_block = function(rc)
     local last_line = lines[#lines] or ""
     local line_len = vim.fn.strdisplaywidth(last_line)
     local win_width = vim.api.nvim_win_get_width(0)
+    local last_line_byte_len = string.len(last_line)
     vim.api.nvim_buf_set_extmark(bufnr, namespace, end_row - 1, 0, {
       end_line = end_row - 1,
-      end_col = #last_line,
+      end_col = last_line_byte_len,
       hl_group = codeblock_hl,
       priority = 0,
     })
     if line_len < win_width then
-      vim.api.nvim_buf_set_extmark(bufnr, namespace, end_row - 1, line_len, {
+      vim.api.nvim_buf_set_extmark(bufnr, namespace, end_row - 1, last_line_byte_len, {
         virt_text = { { string.rep(" ", win_width - line_len), codeblock_hl } },
         virt_text_pos = "overlay",
         hl_mode = "combine",
@@ -562,18 +564,19 @@ render.code_block = function(rc)
 
   -- 3. 给代码块内容（中间行）只设置背景色，不影响语法高亮
   for i = start_row + 1, end_row - 2 do
+    local line_content = lines[i - start_row + 1] or ""
+    local line_byte_len = string.len(line_content)
     vim.api.nvim_buf_set_extmark(bufnr, namespace, i, 0, {
       end_line = i,
-      end_col = #lines[i - start_row + 1] or 0,
+      end_col = line_byte_len,
       hl_group = codeblock_hl,
       priority = 0,
     })
     -- 如果内容行宽度小于窗口宽度，补全背景色到整行
-    local line_content = lines[i - start_row + 1] or ""
     local line_len = vim.fn.strdisplaywidth(line_content)
     local win_width = vim.api.nvim_win_get_width(0)
     if line_len < win_width then
-      vim.api.nvim_buf_set_extmark(bufnr, namespace, i, line_len, {
+      vim.api.nvim_buf_set_extmark(bufnr, namespace, i, line_byte_len, {
         virt_text = { { string.rep(" ", win_width - line_len), codeblock_hl } },
         virt_text_pos = "overlay",
         hl_mode = "combine",
