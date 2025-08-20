@@ -69,11 +69,24 @@ end
 -- end
 
 
-render.init = function(namespace, config, query, regex_list)
-  -- Clear existing highlights
+-- 节流渲染实现
+local render_timer = nil
+render.throttle_init = function(namespace, config, query, regex_list)
+  if render_timer then
+    render_timer:stop()
+    render_timer:close()
+    render_timer = nil
+  end
+  render_timer = vim.loop.new_timer()
+  render_timer:start(100, 0, vim.schedule_wrap(function()
+    render._init_visible(namespace, config, query, regex_list)
+  end))
+end
+
+-- 只渲染可见区域
+render._init_visible = function(namespace, config, query, regex_list)
   vim.api.nvim_buf_clear_namespace(0, namespace, 0, -1)
 
-  -- If the file type is not markdown, return directly
   local filetype = vim.bo.filetype
   if filetype ~= "markdown" then
     return
@@ -81,29 +94,27 @@ render.init = function(namespace, config, query, regex_list)
   local bufnr = vim.api.nvim_get_current_buf()
   local width = vim.api.nvim_win_get_width(0)
 
+  -- 获取可见行范围
+  local win = vim.api.nvim_get_current_win()
+  local topline = vim.fn.line('w0') - 1  -- 0-based
+  local botline = vim.fn.line('w$')      -- 1-based
+
   local ts = vim.treesitter
-  -- get praser
   local parser = ts.get_parser(bufnr, filetype)
-  -- get parser tree
   local tree = parser:parse()[1]
-  -- get root node
   local root = tree:root()
-  -- parse query
   local query_obj = ts.query.parse(filetype, query)
 
-  -- Iterate over the query results
-  for id, node in query_obj:iter_captures(root, bufnr, 0, -1) do
+  for id, node in query_obj:iter_captures(root, bufnr, topline, botline) do
     local name = query_obj.captures[id]
     local icon = type(config.render[name].icon) == "table" and config.render[name].icon[1] or
         config.render[name].icon
     local hl_group = config.render[name].hl_group or name
     local start_row, start_col, end_row, end_col = node:range()
-    -- get line content
     local line = vim.api.nvim_buf_get_lines(bufnr, start_row, start_row + 1, false)[1]
     local line_length = #line
     local icon_padding = config.render[name].icon_padding
 
-    -- 仅对非 code_block 类型才跳过代码块内的渲染
     if name ~= "code_block" and is_in_codeblock(bufnr, start_row) then
       goto continue_query
     end
@@ -146,10 +157,9 @@ render.init = function(namespace, config, query, regex_list)
           end_line = end_row,
           end_col = end_col,
           conceal = icon,
-          hl_group = hl_group, -- use_name
-          priority = 0,        -- To ignore conceal hl_group when focused
+          hl_group = hl_group,
+          priority = 0,
         })
-        -- 通用 after_highlight 支持：只有 after_highlight 显式配置且不为 nil/false 时才应用
         local after_hl = config.render[name].after_highlight
         if after_hl ~= nil and after_hl ~= false then
           local line_content = vim.api.nvim_buf_get_lines(bufnr, start_row, start_row + 1, false)[1] or ""
@@ -180,48 +190,47 @@ render.init = function(namespace, config, query, regex_list)
       end
     end
     ::continue_query::
-    -- Insert padding
-    -- render.render_padding(namespace, icon_padding, 0, start_row, start_col, end_row, end_col, hl_group)
   end
+
   for name, regex in pairs(regex_list) do
     local icon = config.render[name].icon or '';
-    local matches = utils.find_matches_with_groups(vim.api.nvim_buf_get_lines(0, 0, -1, false), regex)
+    local lines = vim.api.nvim_buf_get_lines(0, topline, botline, false)
+    local matches = utils.find_matches_with_groups(lines, regex)
     local icon_padding = config.render[name].icon_padding
     for _, match in ipairs(matches) do
-      -- 检查是否在代码块内，如果是则跳过渲染
-      if is_in_codeblock(bufnr, match.lnum) then
+      local lnum = topline + match.lnum
+      if is_in_codeblock(bufnr, lnum) then
         goto continue_regex
       end
       if #match.groups == 0 then
         local hl_group = config.render[name].hl_group or name
-        vim.api.nvim_buf_set_extmark(bufnr, namespace, match.lnum, match.start_col, {
-          end_line = match.lnum,
+        vim.api.nvim_buf_set_extmark(bufnr, namespace, lnum, match.start_col, {
+          end_line = lnum,
           end_col = match.end_col,
           conceal = type(icon) == "table" and icon[1] or icon,
           hl_group = hl_group,
           priority = 0,
         })
-        -- render.render_padding(namespace, icon_padding, 0, match.start_row, match.start_col, match.end_row, match.end_col,
-        -- hl_group)
       else
         for i, group in ipairs(match.groups) do
           local hl_group = config.render[name].hl_group or name
           local conceal = type(icon) == "table" and icon[i] or icon
-          vim.api.nvim_buf_set_extmark(bufnr, namespace, match.lnum, group.start_col, {
-            end_line = match.lnum,
+          vim.api.nvim_buf_set_extmark(bufnr, namespace, lnum, group.start_col, {
+            end_line = lnum,
             end_col = group.end_col + 1,
             conceal = conceal,
             hl_group = hl_group,
             priority = 0,
           })
-          -- render.render_padding(namespace, config.render[name].icon_padding, i, match.lnum, group.start_col, match.lnum,
-          -- group.end_col + 1, hl_group)
         end
       end
       ::continue_regex::
     end
   end
 end
+
+-- 兼容原有接口
+render.init = render.throttle_init
 
 render.list = function(rc)
   vim.api.nvim_buf_set_extmark(rc.bufnr, rc.namespace, rc.start_row, rc.end_col - 2, {

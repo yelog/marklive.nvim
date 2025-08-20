@@ -54,6 +54,7 @@ M.setup = function(config)
   end
 end
 
+-- 使用节流和可见区域渲染
 M.render = function()
   render.init(M.namespace, M.config, query, regex_list)
 end
@@ -68,7 +69,9 @@ M.enable = function()
 
   vim.cmd [[
         augroup Marklive
+        autocmd!
         autocmd FileChangedShellPost,Syntax,TextChanged,InsertLeave,TextChangedI * lua require('marklive').render()
+        autocmd CursorMoved,CursorMovedI * lua require('marklive').render()
         augroup END
     ]]
 end
