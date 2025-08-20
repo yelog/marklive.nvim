@@ -834,6 +834,10 @@ vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
       if row == nil or row < 0 or row >= line_count then return end
       for _, tbl in ipairs(table_ranges) do
         if row >= tbl.start_row and row < tbl.end_row then
+          -- 跳过表格首行和末行，避免清除虚拟包裹行，防止闪烁
+          if row == tbl.start_row or row == tbl.end_row - 1 then
+            return
+          end
           -- 只清除并重渲染该行
           vim.api.nvim_buf_clear_namespace(tbl.bufnr, tbl.namespace, row, row + 1)
           if render_table_row then
