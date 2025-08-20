@@ -406,10 +406,14 @@ render.table = function(rc)
     hl_mode = "combine",
   }
 
-  -- 顶部边框（渲染在表格内容之前的上一行，不占用内容行）
-  vim.api.nvim_buf_set_extmark(bufnr, namespace, math.max(0, start_row - 1), 0, vim.tbl_extend("force", virt_opts, {
-    virt_text = top_border,
-  }))
+  -- 顶部边框和底部边框通过 virt_lines 渲染在表格首行上方和末行下方
+  -- 先清除原有的顶部边框 extmark
+  -- 渲染顶部边框
+  vim.api.nvim_buf_set_extmark(bufnr, namespace, start_row, 0, {
+    virt_lines = { top_border },
+    virt_lines_above = true,
+    hl_mode = "combine",
+  })
 
   -- 内容行
   for i, row_cells in ipairs(table_cells) do
@@ -457,21 +461,12 @@ render.table = function(rc)
     end
   end
 
-  -- 底部边框（渲染在表格内容之后的下一行，不占用内容行）
-  local last_line = vim.api.nvim_buf_get_lines(bufnr, end_row - 1, end_row, false)[1] or ""
-  local orig_width = vim.fn.strdisplaywidth(last_line)
-  local render_width = 0
-  for _, seg in ipairs(bottom_border) do
-    render_width = render_width + vim.fn.strdisplaywidth(seg[1])
-  end
-  local fill = ""
-  if render_width < orig_width then
-    fill = string.rep(" ", orig_width - render_width)
-    table.insert(bottom_border, { fill })
-  end
-  vim.api.nvim_buf_set_extmark(bufnr, namespace, end_row, 0, vim.tbl_extend("force", virt_opts, {
-    virt_text = bottom_border,
-  }))
+  -- 底部边框通过 virt_lines 渲染在表格末行下方
+  vim.api.nvim_buf_set_extmark(bufnr, namespace, end_row - 1, 0, {
+    virt_lines = { bottom_border },
+    virt_lines_above = false,
+    hl_mode = "combine",
+  })
 end
 
 -- 用于渲染 markdown 代码块
