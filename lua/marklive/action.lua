@@ -221,7 +221,13 @@ function M.toggle_task()
       for _, row in ipairs(changed_rows) do
         update_parent_state(lines, row)
       end
-      vim.api.nvim_buf_set_lines(0, 0, -1, false, lines)
+      -- 一行一行设置，避免全量 set_lines 导致 extmark 被清除
+      for i = 1, #lines do
+        local orig_line = vim.api.nvim_buf_get_lines(0, i - 1, i, false)[1]
+        if orig_line ~= lines[i] then
+          vim.api.nvim_buf_set_lines(0, i - 1, i, false, { lines[i] })
+        end
+      end
     else
       -- 非层级模式只更新选中行
       for _, row in ipairs(changed_rows) do
@@ -239,7 +245,13 @@ function M.toggle_task()
     end
     if hierarchy then
       update_parent_state(lines, row + 1)
-      vim.api.nvim_buf_set_lines(0, 0, -1, false, lines)
+      -- 一行一行设置，避免全量 set_lines 导致 extmark 被清除
+      for i = 1, #lines do
+        local orig_line = vim.api.nvim_buf_get_lines(0, i - 1, i, false)[1]
+        if orig_line ~= lines[i] then
+          vim.api.nvim_buf_set_lines(0, i - 1, i, false, { lines[i] })
+        end
+      end
     else
       vim.api.nvim_buf_set_lines(0, row, row + 1, false, { lines[row + 1] })
     end
