@@ -369,7 +369,7 @@ render.table = function(rc)
     for i = 1, col_count do
       local cell = row_cells[i] or ""
       -- 对 cell 做 markdown 语法符号隐藏和分段高亮
-      local segments = conceal_markdown_cell(cell, bufnr, i, i, config)
+      local segments = conceal_markdown_cell(cell, bufnr, i, i, rc.config)
       -- 计算内容宽度
       local cell_width = 0
       for _, seg in ipairs(segments) do
@@ -395,12 +395,9 @@ render.table = function(rc)
     return row
   end
 
-  -- 检查光标是否在表格范围内，如果在则不渲染表格
+  -- 优化：表格内只有光标所在行显示原文，其他行渲染表格
   local cursor = vim.api.nvim_win_get_cursor(0)
   local cursor_row = cursor[1] - 1
-  if cursor_row >= start_row and cursor_row < end_row then
-    return
-  end
 
   -- 渲染虚拟文本边框（不占用实际行）
   local win_width = vim.api.nvim_win_get_width(0)
@@ -417,41 +414,46 @@ render.table = function(rc)
   -- 内容行
   for i, row_cells in ipairs(table_cells) do
     local is_header = i == 1
-    local content = make_content_row(row_cells, is_header)
     local line_idx = start_row + i - 1
-    local orig_line = vim.api.nvim_buf_get_lines(bufnr, line_idx, line_idx + 1, false)[1] or ""
-    local orig_width = vim.fn.strdisplaywidth(orig_line)
-    -- 计算内容宽度
-    local render_width = 0
-    for _, seg in ipairs(content) do
-      render_width = render_width + vim.fn.strdisplaywidth(seg[1])
-    end
-    local fill = ""
-    if render_width < orig_width then
-      fill = string.rep(" ", orig_width - render_width)
-      table.insert(content, { fill })
-    end
-
-    -- 检查当前行是否为 markdown 表格分隔线（如 |---|---|），如果是则只渲染横线，不渲染内容
-    local is_sep_line = orig_line:match("^%s*|[%s%-%:|]+|%s*$") and orig_line:find("%-")
-    if is_sep_line then
-      local render_width2 = 0
-      for _, seg in ipairs(middle_border) do
-        render_width2 = render_width2 + vim.fn.strdisplaywidth(seg[1])
-      end
-      local fill2 = ""
-      if render_width2 < orig_width then
-        fill2 = string.rep(" ", orig_width - render_width2)
-      end
-      local virt = vim.deepcopy(middle_border)
-      table.insert(virt, { fill2 })
-      vim.api.nvim_buf_set_extmark(bufnr, namespace, line_idx, 0, vim.tbl_extend("force", virt_opts, {
-        virt_text = virt,
-      }))
+    if cursor_row == line_idx then
+      -- 光标所在行，显示原文（不渲染表格样式）
+      -- 只清除该行的 extmark，由外部 autocmd 保证
     else
-      vim.api.nvim_buf_set_extmark(bufnr, namespace, line_idx, 0, vim.tbl_extend("force", virt_opts, {
-        virt_text = content,
-      }))
+      local content = make_content_row(row_cells, is_header)
+      local orig_line = vim.api.nvim_buf_get_lines(bufnr, line_idx, line_idx + 1, false)[1] or ""
+      local orig_width = vim.fn.strdisplaywidth(orig_line)
+      -- 计算内容宽度
+      local render_width = 0
+      for _, seg in ipairs(content) do
+        render_width = render_width + vim.fn.strdisplaywidth(seg[1])
+      end
+      local fill = ""
+      if render_width < orig_width then
+        fill = string.rep(" ", orig_width - render_width)
+        table.insert(content, { fill })
+      end
+
+      -- 检查当前行是否为 markdown 表格分隔线（如 |---|---|），如果是则只渲染横线，不渲染内容
+      local is_sep_line = orig_line:match("^%s*|[%s%-%:|]+|%s*$") and orig_line:find("%-")
+      if is_sep_line then
+        local render_width2 = 0
+        for _, seg in ipairs(middle_border) do
+          render_width2 = render_width2 + vim.fn.strdisplaywidth(seg[1])
+        end
+        local fill2 = ""
+        if render_width2 < orig_width then
+          fill2 = string.rep(" ", orig_width - render_width2)
+        end
+        local virt = vim.deepcopy(middle_border)
+        table.insert(virt, { fill2 })
+        vim.api.nvim_buf_set_extmark(bufnr, namespace, line_idx, 0, vim.tbl_extend("force", virt_opts, {
+          virt_text = virt,
+        }))
+      else
+        vim.api.nvim_buf_set_extmark(bufnr, namespace, line_idx, 0, vim.tbl_extend("force", virt_opts, {
+          virt_text = content,
+        }))
+      end
     end
   end
 
@@ -620,6 +622,180 @@ local table_ranges_by_buf = {}
 
 -- 包装原始 table 渲染函数，记录每个表格范围
 local _orig_table = render.table
+
+-- 新增：渲染表格单行（不渲染整表）
+local function render_table_row(rc, row_idx)
+  -- 只渲染表格的某一行
+  local bufnr = rc.bufnr
+  local namespace = rc.namespace
+  local start_row = rc.start_row
+  local end_row = rc.end_row
+  local config = rc.config
+
+  local border_hl = "MarkliveTableBorder"
+  local header_hl = "MarkliveTableHeader"
+  local border = {
+    '┌', '┬', '┐',
+    '├', '┼', '┤',
+    '└', '┴', '┘',
+    '│', '─',
+  }
+
+  local lines = vim.api.nvim_buf_get_lines(bufnr, start_row, end_row, false)
+  local table_cells = {}
+  local column_max_width = {}
+
+  for i, line in ipairs(lines) do
+    local row = {}
+    for cell in string.gmatch(line, "|([^|]*)") do
+      local cell_text = vim.trim(cell)
+      table.insert(row, cell_text)
+    end
+    if #row > 0 and row[#row] == "" then
+      table.remove(row, #row)
+    end
+    table.insert(table_cells, row)
+    for col, cell_text in ipairs(row) do
+      local cell_len = vim.fn.strdisplaywidth(cell_text)
+      column_max_width[col] = math.max(column_max_width[col] or 0, cell_len)
+    end
+  end
+
+  local col_count = #column_max_width
+
+  local function make_border_row(left, mid, right)
+    local row = {}
+    table.insert(row, { left, border_hl })
+    for i = 1, col_count do
+      table.insert(row, { string.rep(border[11], column_max_width[i] + 2), border_hl })
+      if i < col_count then
+        table.insert(row, { mid, border_hl })
+      end
+    end
+    table.insert(row, { right, border_hl })
+    return row
+  end
+
+  local middle_border = make_border_row(border[4], border[5], border[6])
+
+  local function conceal_markdown_cell(cell, bufnr, row_idx, col_idx, config)
+    local patterns = {}
+    table.insert(patterns, { "(`)(.-)(`)", "markdownCode" })
+    table.insert(patterns, { "(%*%*)(.-)(%*%*)", "markdownBold" })
+    table.insert(patterns, { "(_)(.-)(_)", "markdownItalic" })
+    table.insert(patterns, { "(~~)(.-)(~~)", "markdownStrike" })
+    table.insert(patterns, { "(<u>)(.-)(</u>)", nil })
+    table.insert(patterns, { "(<mark>)(.-)(</mark>)", nil })
+    table.insert(patterns, { "(<b>)(.-)(</b>)", "markdownBold" })
+
+    local function split_segments(str, pat_idx)
+      if pat_idx > #patterns then
+        return { { str } }
+      end
+      local pattern, hl_group = patterns[pat_idx][1], patterns[pat_idx][2]
+      local res = {}
+      local last_end = 1
+      local found = false
+      while true do
+        local s, e, left, mid, right = str:find(pattern, last_end)
+        if not s then break end
+        found = true
+        if s > last_end then
+          local before = str:sub(last_end, s - 1)
+          vim.list_extend(res, split_segments(before, pat_idx + 1))
+        end
+        if mid and #mid > 0 then
+          table.insert(res, { mid, hl_group })
+        end
+        last_end = e + 1
+      end
+      if found and last_end <= #str then
+        local after = str:sub(last_end)
+        vim.list_extend(res, split_segments(after, pat_idx + 1))
+      elseif not found then
+        return split_segments(str, pat_idx + 1)
+      end
+      return res
+    end
+
+    return split_segments(cell, 1)
+  end
+
+  local function make_content_row(row_cells, is_header)
+    local row = {}
+    table.insert(row, { border[10], border_hl })
+    for i = 1, col_count do
+      local cell = row_cells[i] or ""
+      local segments = conceal_markdown_cell(cell, bufnr, i, i, config)
+      local cell_width = 0
+      for _, seg in ipairs(segments) do
+        cell_width = cell_width + vim.fn.strdisplaywidth(seg[1])
+      end
+      local pad = column_max_width[i] - cell_width
+      if is_header then
+        table.insert(row, { " ", header_hl })
+        for _, seg in ipairs(segments) do
+          table.insert(row, { seg[1], seg[2] or header_hl })
+        end
+        table.insert(row, { string.rep(" ", pad + 1), header_hl })
+      else
+        table.insert(row, { " " })
+        for _, seg in ipairs(segments) do
+          table.insert(row, { seg[1], seg[2] })
+        end
+        table.insert(row, { string.rep(" ", pad + 1) })
+      end
+      table.insert(row, { border[10], border_hl })
+    end
+    return row
+  end
+
+  -- 只渲染指定行
+  local i = row_idx - start_row + 1
+  if i < 1 or i > #table_cells then return end
+  local is_header = i == 1
+  local content = make_content_row(table_cells[i], is_header)
+  local line_idx = row_idx
+  local orig_line = vim.api.nvim_buf_get_lines(bufnr, line_idx, line_idx + 1, false)[1] or ""
+  local orig_width = vim.fn.strdisplaywidth(orig_line)
+  local render_width = 0
+  for _, seg in ipairs(content) do
+    render_width = render_width + vim.fn.strdisplaywidth(seg[1])
+  end
+  local fill = ""
+  if render_width < orig_width then
+    fill = string.rep(" ", orig_width - render_width)
+    table.insert(content, { fill })
+  end
+
+  local virt_opts = {
+    virt_text_pos = "overlay",
+    hl_mode = "combine",
+  }
+
+  -- 检查当前行是否为 markdown 表格分隔线（如 |---|---|），如果是则只渲染横线，不渲染内容
+  local is_sep_line = orig_line:match("^%s*|[%s%-%:|]+|%s*$") and orig_line:find("%-")
+  if is_sep_line then
+    local render_width2 = 0
+    for _, seg in ipairs(middle_border) do
+      render_width2 = render_width2 + vim.fn.strdisplaywidth(seg[1])
+    end
+    local fill2 = ""
+    if render_width2 < orig_width then
+      fill2 = string.rep(" ", orig_width - render_width2)
+    end
+    local virt = vim.deepcopy(middle_border)
+    table.insert(virt, { fill2 })
+    vim.api.nvim_buf_set_extmark(bufnr, namespace, line_idx, 0, vim.tbl_extend("force", virt_opts, {
+      virt_text = virt,
+    }))
+  else
+    vim.api.nvim_buf_set_extmark(bufnr, namespace, line_idx, 0, vim.tbl_extend("force", virt_opts, {
+      virt_text = content,
+    }))
+  end
+end
+
 render.table = function(rc)
   local bufnr = rc.bufnr
   if not table_ranges_by_buf[bufnr] then
@@ -636,6 +812,10 @@ render.table = function(rc)
 end
 
 -- 监听光标移动
+-- 只重渲染光标离开和进入的行，避免全表格闪烁
+local last_cursor_row = nil
+local last_cursor_bufnr = nil
+
 vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
   group = vim.api.nvim_create_augroup("MarkliveTableCursor", { clear = true }),
   callback = function()
@@ -643,24 +823,37 @@ vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
     local table_ranges = table_ranges_by_buf[bufnr] or {}
     local cursor = vim.api.nvim_win_get_cursor(0)
     local cursor_row = cursor[1] - 1
-    local cleared = false
+
+    -- 只在行号变化时处理
+    if last_cursor_row == cursor_row and last_cursor_bufnr == bufnr then
+      return
+    end
+
+    local prev_row = last_cursor_row
+    local prev_bufnr = last_cursor_bufnr
+    last_cursor_row = cursor_row
+    last_cursor_bufnr = bufnr
+
     local line_count = vim.api.nvim_buf_line_count(bufnr)
-    for _, tbl in ipairs(table_ranges) do
-      local in_table = cursor_row >= tbl.start_row and cursor_row < tbl.end_row
-      if in_table then
-        -- 只清除当前表格的渲染，确保行号不越界
-        local start_row = math.max(0, math.min(tbl.start_row - 1, line_count - 1))
-        local end_row = math.max(0, math.min(tbl.end_row + 1, line_count))
-        vim.api.nvim_buf_clear_namespace(tbl.bufnr, tbl.namespace, start_row, end_row)
-        cleared = true
+    local function clear_and_rerender_row(row)
+      if row == nil or row < 0 or row >= line_count then return end
+      for _, tbl in ipairs(table_ranges) do
+        if row >= tbl.start_row and row < tbl.end_row then
+          -- 只清除并重渲染该行
+          vim.api.nvim_buf_clear_namespace(tbl.bufnr, tbl.namespace, row, row + 1)
+          if render_table_row then
+            render_table_row(tbl, row)
+          end
+          break
+        end
       end
     end
-    -- 无论有无表格，只要没有清除，就重新渲染
-    if not cleared then
-      if render.last_namespace and render.last_config and render.last_query and render.last_regex_list then
-        require('marklive.render').init(render.last_namespace, render.last_config, render.last_query, render.last_regex_list)
-      end
+
+    -- 只处理离开和进入的行
+    if prev_row ~= nil and prev_bufnr == bufnr and prev_row ~= cursor_row then
+      clear_and_rerender_row(prev_row)
     end
+    clear_and_rerender_row(cursor_row)
   end,
 })
 
