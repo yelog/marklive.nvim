@@ -318,11 +318,11 @@ local function fix_ordered_list(lines)
             for child in node:iter_children() do
               if child:type() == "list_item" then
                 local start_row, _, _, _ = child:range()
-                local line = lines[start_row+1]
+                local line = lines[start_row + 1]
                 if line then
                   local ok, _ = is_ordered_list(line)
                   if ok then
-                    table.insert(indices, start_row+1)
+                    table.insert(indices, start_row + 1)
                     if not indent then
                       indent = get_indent(line)
                     end
@@ -375,7 +375,7 @@ local function auto_new_list_line()
   if not (list_cfg and list_cfg.enable) then return end
 
   local row, col = unpack(vim.api.nvim_win_get_cursor(0))
-  local lines = vim.api.nvim_buf_get_lines(0, row-1, row, false)
+  local lines = vim.api.nvim_buf_get_lines(0, row - 1, row, false)
   if #lines == 0 then return end
   local line = lines[1]
   local unorder = list_cfg.unorder or { '-', '*', '+' }
@@ -385,7 +385,7 @@ local function auto_new_list_line()
   if is_unorder then
     local indent = line:match("^(%s*)")
     local new_line
-    -- 如果是任务列表（- [ ]），只生成 - [ ] 
+    -- 如果是任务列表（- [ ]），只生成 - [ ]
     if is_task_line(line) then
       new_line = indent .. marker .. " [ ] "
     else
@@ -399,7 +399,7 @@ local function auto_new_list_line()
     -- 将光标定位到 -/marker+空格 后
     local marker_start, marker_end = new_line:find("^%s*[-*+]%s")
     local cursor_col = marker_end and (marker_end + 1) or (#new_line + 1)
-    vim.api.nvim_win_set_cursor(0, { row+1, cursor_col })
+    vim.api.nvim_win_set_cursor(0, { row + 1, cursor_col })
     vim.cmd("startinsert!")
     return true
   end
@@ -425,10 +425,10 @@ local function auto_new_list_line()
     end
 
     -- 重新获取新插入行内容
-    local fixed_line = vim.api.nvim_buf_get_lines(0, row, row+1, false)[1]
+    local fixed_line = vim.api.nvim_buf_get_lines(0, row, row + 1, false)[1]
     local marker_start, marker_end = fixed_line:find("^%s*[%w%.]+%s")
     local cursor_col = marker_end and (marker_end + 1) or (#fixed_line + 1)
-    vim.api.nvim_win_set_cursor(0, { row+1, cursor_col })
+    vim.api.nvim_win_set_cursor(0, { row + 1, cursor_col })
     vim.cmd("startinsert!")
     return true
   end
@@ -443,7 +443,7 @@ local function auto_new_list_line_above()
 
   local row, col = unpack(vim.api.nvim_win_get_cursor(0))
   if row == 1 then return end
-  local lines = vim.api.nvim_buf_get_lines(0, row-2, row-1, false)
+  local lines = vim.api.nvim_buf_get_lines(0, row - 2, row - 1, false)
   if #lines == 0 then return end
   local line = lines[1]
   local unorder = list_cfg.unorder or { '-', '*', '+' }
@@ -463,7 +463,7 @@ local function auto_new_list_line_above()
     if not new_line:match("^%s*[-*+]%s") then
       new_line = new_line:gsub("^%s*([-*+])", "%1 ")
     end
-    vim.api.nvim_buf_set_lines(0, row-1, row-1, false, { new_line })
+    vim.api.nvim_buf_set_lines(0, row - 1, row - 1, false, { new_line })
     local marker_start, marker_end = new_line:find("^%s*[-*+]%s")
     local cursor_col = marker_end and (marker_end + 1) or (#new_line + 1)
     vim.api.nvim_win_set_cursor(0, { row, cursor_col })
@@ -480,7 +480,7 @@ local function auto_new_list_line_above()
       local indent = line:match("^(%s*)")
       local new_marker = next_ordered_number(prev_num, typ)
       local new_line = indent .. new_marker .. " "
-      vim.api.nvim_buf_set_lines(0, row-1, row-1, false, { new_line })
+      vim.api.nvim_buf_set_lines(0, row - 1, row - 1, false, { new_line })
       -- 修正所有同级有序列表的序号（插入后再修正）
       local all_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
       fix_ordered_list(all_lines)
@@ -492,7 +492,7 @@ local function auto_new_list_line_above()
         end
       end
       -- 重新获取新插入行内容
-      local fixed_line = vim.api.nvim_buf_get_lines(0, row-1, row, false)[1]
+      local fixed_line = vim.api.nvim_buf_get_lines(0, row - 1, row, false)[1]
       local marker_start, marker_end = fixed_line:find("^%s*[%w%.]+%s")
       local cursor_col = marker_end and (marker_end + 1) or (#fixed_line + 1)
       vim.api.nvim_win_set_cursor(0, { row, cursor_col })
@@ -542,7 +542,7 @@ local function list_indent(direction)
   end
 
   local all_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-  local lines = vim.api.nvim_buf_get_lines(0, start_row, end_row+1, false)
+  local lines = vim.api.nvim_buf_get_lines(0, start_row, end_row + 1, false)
   local unorder = list_cfg.unorder or { '-', '*', '+' }
 
   -- 记录光标原始列
@@ -559,19 +559,22 @@ local function list_indent(direction)
     if is_unorder then
       local cur_idx = 1
       for j, m in ipairs(unorder) do
-        if m == marker then cur_idx = j break end
+        if m == marker then
+          cur_idx = j
+          break
+        end
       end
       if direction == "indent" then
         -- normal/visual 模式都切换为下一个无序列表类型
         cur_idx = (cur_idx) % #unorder + 1
         local content = line:gsub("^%s*[-*+]%s*", "")
-        lines[i] = string.rep(" ", indent+4) .. unorder[cur_idx] .. " " .. content
+        lines[i] = string.rep(" ", indent + 4) .. unorder[cur_idx] .. " " .. content
         if i == 1 then indent_delta = 4 end
       else
         -- 反缩进时切换为上一个无序列表类型
         cur_idx = (cur_idx - 2 + #unorder) % #unorder + 1
         local content = line:gsub("^%s*[-*+]%s*", "")
-        lines[i] = (indent >= 4 and string.rep(" ", indent-4) or "") .. unorder[cur_idx] .. " " .. content
+        lines[i] = (indent >= 4 and string.rep(" ", indent - 4) or "") .. unorder[cur_idx] .. " " .. content
         if i == 1 then indent_delta = (indent >= 4) and -4 or 0 end
       end
     else
@@ -579,10 +582,10 @@ local function list_indent(direction)
       local ok, marker = is_ordered_list(line)
       if ok then
         if direction == "indent" then
-          lines[i] = string.rep(" ", indent+4) .. "1." .. line:gsub("^%s*[%d]+%.", "")
+          lines[i] = string.rep(" ", indent + 4) .. "1." .. line:gsub("^%s*[%d]+%.", "")
           if i == 1 then indent_delta = 4 end
         else
-          lines[i] = (indent >= 4 and string.rep(" ", indent-4) or "") .. "1." .. line:gsub("^%s*[%d]+%.", "")
+          lines[i] = (indent >= 4 and string.rep(" ", indent - 4) or "") .. "1." .. line:gsub("^%s*[%d]+%.", "")
           if i == 1 then indent_delta = (indent >= 4) and -4 or 0 end
         end
       end
@@ -632,8 +635,8 @@ local function setup_list_autocmd()
       -- 仅当上一行为有序/无序/任务列表，且当前行为空时触发
       local row, col = unpack(vim.api.nvim_win_get_cursor(0))
       if row < 2 then return end
-      local prev_line = vim.api.nvim_buf_get_lines(0, row-2, row-1, false)[1]
-      local cur_line = vim.api.nvim_buf_get_lines(0, row-1, row, false)[1]
+      local prev_line = vim.api.nvim_buf_get_lines(0, row - 2, row - 1, false)[1]
+      local cur_line = vim.api.nvim_buf_get_lines(0, row - 1, row, false)[1]
       -- 只在当前行为空且处于插入模式下的 o/O 操作时触发
       if cur_line ~= "" then return end
       -- 如果是通过删除到行首导致的空行，不自动补全
@@ -648,8 +651,8 @@ local function setup_list_autocmd()
       local is_task = is_task_line(prev_line)
       if is_unorder or is_order or is_task then
         -- 删除当前空行，调用自动补全
-        vim.api.nvim_buf_set_lines(0, row-1, row, false, {})
-        vim.api.nvim_win_set_cursor(0, { row-1, #prev_line })
+        vim.api.nvim_buf_set_lines(0, row - 1, row, false, {})
+        vim.api.nvim_win_set_cursor(0, { row - 1, #prev_line })
         vim.schedule(function()
           auto_new_list_line()
         end)
@@ -662,14 +665,14 @@ local function setup_list_autocmd()
       -- o
       vim.keymap.set("n", "o", function()
         local row = vim.api.nvim_win_get_cursor(0)[1]
-        local cur_line = vim.api.nvim_buf_get_lines(0, row-1, row, false)[1]
+        local cur_line = vim.api.nvim_buf_get_lines(0, row - 1, row, false)[1]
         -- 检查是否为“只有序列符号+空格”的新行
         local is_empty_ordered = cur_line and cur_line:match("^%s*%d+%.%s*$")
         local is_empty_unordered = cur_line and cur_line:match("^%s*[-*+]%s*$")
         if is_empty_ordered or is_empty_unordered then
           -- 删除当前行内容，光标移到行首并进入插入模式
-          vim.api.nvim_buf_set_lines(0, row-1, row, false, {""})
-          vim.api.nvim_win_set_cursor(0, {row, 0})
+          vim.api.nvim_buf_set_lines(0, row - 1, row, false, { "" })
+          vim.api.nvim_win_set_cursor(0, { row, 0 })
           vim.cmd("startinsert!")
           -- 如果是有序列表，需要重新修正序号
           if is_empty_ordered then
@@ -705,7 +708,7 @@ local function setup_list_autocmd()
         if is_empty_ordered or is_empty_unordered then
           -- 删除当前行内容，光标移到行首
           vim.api.nvim_set_current_line("")
-          vim.api.nvim_win_set_cursor(0, {row, 0})
+          vim.api.nvim_win_set_cursor(0, { row, 0 })
           -- 如果是有序列表，需要重新修正序号
           if is_empty_ordered then
             local all_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
@@ -735,19 +738,25 @@ local function setup_list_autocmd()
         end
       end, { buffer = true, noremap = true, silent = true })
       -- visual 模式下 >/< 一下即可缩进/反缩进
-      vim.keymap.set("v", ">", function()
-        list_indent("indent")
-      end, { buffer = true, noremap = true, silent = true })
-      vim.keymap.set("v", "<", function()
-        list_indent("outdent")
-      end, { buffer = true, noremap = true, silent = true })
+      -- 支持 . 重复，使用 :normal! 执行命令并注册 repeat
+      local repeatable_indent = function(direction)
+        return function()
+          list_indent(direction)
+          -- 在原来的基础上添加 \r（回车符）
+          vim.fn["repeat#set"](":lua require'marklive.action'.repeat_list_indent('" .. direction .. "')\r")
+        end
+      end
+
+      M.repeat_list_indent = function(direction)
+        list_indent(direction)
+        vim.fn["repeat#set"](":lua require'marklive.action'.repeat_list_indent('" .. direction .. "')\r")
+      end
+
+      vim.keymap.set("v", ">", repeatable_indent("indent"), { buffer = true, noremap = true, silent = true })
+      vim.keymap.set("v", "<", repeatable_indent("outdent"), { buffer = true, noremap = true, silent = true })
       -- normal 模式下 >>/<< 也用自定义逻辑
-      vim.keymap.set("n", ">>", function()
-        list_indent("indent")
-      end, { buffer = true, noremap = true, silent = true })
-      vim.keymap.set("n", "<<", function()
-        list_indent("outdent")
-      end, { buffer = true, noremap = true, silent = true })
+      vim.keymap.set("n", ">>", repeatable_indent("indent"), { buffer = true, noremap = true, silent = true })
+      vim.keymap.set("n", "<<", repeatable_indent("outdent"), { buffer = true, noremap = true, silent = true })
     end
   })
 end
