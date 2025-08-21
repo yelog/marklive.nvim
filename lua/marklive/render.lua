@@ -77,8 +77,12 @@ render.throttle_init = function(namespace, config, query, regex_list)
     render_timer:close()
     render_timer = nil
   end
+  local delay = 10
+  if config and config.render_delay then
+    delay = config.render_delay
+  end
   render_timer = vim.loop.new_timer()
-  render_timer:start(100, 0, vim.schedule_wrap(function()
+  render_timer:start(delay, 0, vim.schedule_wrap(function()
     render._init_visible(namespace, config, query, regex_list)
   end))
 end
@@ -96,8 +100,8 @@ render._init_visible = function(namespace, config, query, regex_list)
 
   -- 获取可见行范围
   local win = vim.api.nvim_get_current_win()
-  local topline = vim.fn.line('w0') - 1  -- 0-based
-  local botline = vim.fn.line('w$')      -- 1-based
+  local topline = vim.fn.line('w0') - 1 -- 0-based
+  local botline = vim.fn.line('w$')     -- 1-based
 
   local ts = vim.treesitter
   local parser = ts.get_parser(bufnr, filetype)
@@ -860,7 +864,19 @@ vim.api.nvim_create_autocmd({ "BufEnter" }, {
   group = vim.api.nvim_create_augroup("MarkliveTableBufEnter", { clear = true }),
   callback = function()
     if render.last_namespace and render.last_config and render.last_query and render.last_regex_list then
-      require('marklive.render').init(render.last_namespace, render.last_config, render.last_query, render.last_regex_list)
+      require('marklive.render').init(render.last_namespace, render.last_config, render.last_query,
+        render.last_regex_list)
+    end
+  end,
+})
+
+-- 新增：监听窗口滚动事件，滚动时触发渲染
+vim.api.nvim_create_autocmd({ "WinScrolled" }, {
+  group = vim.api.nvim_create_augroup("MarkliveTableWinScrolled", { clear = true }),
+  callback = function()
+    if render.last_namespace and render.last_config and render.last_query and render.last_regex_list then
+      require('marklive.render').init(render.last_namespace, render.last_config, render.last_query,
+        render.last_regex_list)
     end
   end,
 })
