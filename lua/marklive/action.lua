@@ -509,6 +509,23 @@ local function list_indent(direction)
   local list_cfg = config.action and config.action.list
   if not (list_cfg and list_cfg.enable) then return end
 
+  -- 只允许在 config.filetype 指定的文件类型中生效
+  local filetype = vim.bo.filetype
+  local valid_filetypes = config.filetype
+  if type(valid_filetypes) == "string" then
+    valid_filetypes = { valid_filetypes }
+  end
+  local matched = false
+  for _, ft in ipairs(valid_filetypes or {}) do
+    if ft == filetype then
+      matched = true
+      break
+    end
+  end
+  if not matched then
+    return
+  end
+
   local mode = vim.fn.mode()
   local start_row, end_row
   if mode == "v" or mode == "V" or mode == "\22" then
