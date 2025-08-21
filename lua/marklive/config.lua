@@ -78,7 +78,7 @@ return {
     markliveTag = {
       -- Match a space followed by a hash symbol and any characters that are not a hash or space
       matchadd = "\\v\\s\\zs#[^# ]+",
-      highlight = { fg = '#BB9AF7', bg = '#322E45' }
+      highlight = { fg = '#BB9AF7', bg = '#484360' }
     },
     markliveUser = {
       -- Match a space followed by an at symbol and any characters that are not an at or space
