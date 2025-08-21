@@ -17,6 +17,17 @@ end
 
 -- Check if a line is a half-checked task (- [-] or * [-])
 local function is_task_halfchecked(line)
+      local repeatable_indent = function(direction)
+        return function()
+          list_indent(direction)
+          -- 注册 repeat
+          vim.fn["repeat#set"](":lua require'marklive.action'.repeat_list_indent('"..direction.."')")
+        end
+      end
+
+      M.repeat_list_indent = function(direction)
+        list_indent(direction)
+      end
   return line:match("^%s*[-*+]%s+%[%-%]") ~= nil
 end
 
