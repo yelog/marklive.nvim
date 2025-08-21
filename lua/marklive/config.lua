@@ -284,8 +284,7 @@ return {
     },
     list = {
       enable = true,
-      unorder = { '-', '*', '+' },              -- Unordered list markers
-      order = { '1.', 'a.', 'A.', 'i.', 'I.' }, -- Ordered list markers
+      unorder = { '-', '*', '+' }, -- Unordered list markers
     }
   }
 }

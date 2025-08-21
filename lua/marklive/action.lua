@@ -274,129 +274,95 @@ local function is_unordered_list(line, unorder)
   return false
 end
 
--- 判断是否为有序列表
-local function is_ordered_list(line, order)
-  for _, marker in ipairs(order) do
-    local pat = "^%s*([%dAaIi]+%.)%s+"
-    local m = line:match(pat)
-    if m then
-      return true, m
-    end
+-- 判断是否为有序列表（只支持数字）
+local function is_ordered_list(line)
+  local pat = "^%s*([%d]+%.)%s+"
+  local m = line:match(pat)
+  if m then
+    return true, m
   end
   return false
 end
 
--- 获取有序列表的序号和类型
+-- 获取有序列表的序号和类型（只支持数字）
 local function get_ordered_info(line)
-  local num, typ = line:match("^%s*([%d]+)([%.])%s+")
+  local num = line:match("^%s*([%d]+)%.%s+")
   if num then return tonumber(num), "1." end
-  num = line:match("^%s*([a])%.%s+")
-  if num then return string.byte(num) - string.byte("a") + 1, "a." end
-  num = line:match("^%s*([A])%.%s+")
-  if num then return string.byte(num) - string.byte("A") + 1, "A." end
-  num = line:match("^%s*([ivxlcdm]+)%.%s+")
-  if num then return num, "i." end
-  num = line:match("^%s*([IVXLCDM]+)%.%s+")
-  if num then return num, "I." end
   return nil, nil
 end
 
--- 生成下一个有序列表序号
+-- 生成下一个有序列表序号（只支持数字）
 local function next_ordered_number(prev, typ)
-  if typ == "1." then
-    return tostring(prev + 1) .. "."
-  elseif typ == "a." then
-    return string.char(string.byte("a") + prev) .. "."
-  elseif typ == "A." then
-    return string.char(string.byte("A") + prev) .. "."
-  elseif typ == "i." or typ == "I." then
-    -- 罗马数字递增（简单实现，超出范围不处理）
-    local roman = { "i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x" }
-    local idx = 0
-    for i, v in ipairs(roman) do
-      if v == prev:lower() then idx = i break end
-    end
-    if idx > 0 and idx < #roman then
-      return (typ == "I." and roman[idx+1]:upper() or roman[idx+1]) .. "."
-    end
-  end
-  return "1."
+  return tostring(prev + 1) .. "."
 end
 
 -- 检查并修正有序列表序号连续性
-local function fix_ordered_list(lines, order)
-  -- 兼容调用时 order 可能是行号而不是表
-  if type(order) ~= "table" then
-    order = { '1.', 'a.', 'A.', 'i.', 'I.' }
-  end
-
-  -- 使用 treesitter 获取所有 list 区域
+local function fix_ordered_list(lines)
+  -- 第一层有序列表按 treesitter 的 list 进行分组
   local ts_ok, ts = pcall(require, "vim.treesitter")
-  if not ts_ok then
-    -- fallback: 旧逻辑
-    local indent_blocks = {}
-    for i = 1, #lines do
-      local ok, marker = is_ordered_list(lines[i], order)
-      if ok then
-        local cur_indent = get_indent(lines[i])
-        indent_blocks[cur_indent] = indent_blocks[cur_indent] or {}
-        table.insert(indent_blocks[cur_indent], i)
-      end
-    end
-    for indent, indices in pairs(indent_blocks) do
-      if #indices > 0 then
-        local _, typ = get_ordered_info(lines[indices[1]])
-        local num = 1
-        for _, idx in ipairs(indices) do
-          local pat = "^%s*([%dAaIi]+%.)%s+"
-          lines[idx] = lines[idx]:gsub(pat, string.rep(" ", indent) .. (typ == "1." and (tostring(num)..".") or next_ordered_number(num-1, typ)) .. " ")
-          num = num + 1
-        end
-      end
-    end
-    return
-  end
-
-  local bufnr = vim.api.nvim_get_current_buf()
-  local parser = ts.get_parser(bufnr, "markdown")
-  if not parser then return end
-  local tree = parser:parse()[1]
-  if not tree then return end
-  local root = tree:root()
-
-  -- 遍历所有 list 区域
-  local query = vim.treesitter.query.parse("markdown", [[
-    (list) @list
-  ]])
-  for id, node in query:iter_captures(root, bufnr, 0, -1) do
-    if query.captures[id] == "list" then
-      -- 对每个 list 区域，按缩进分组
-      local indent_blocks = {}
-      for child in node:iter_children() do
-        if child:type() == "list_item" then
-          local start_row, _, _, _ = child:range()
-          local line = lines[start_row+1]
-          if line then
-            local ok, marker = is_ordered_list(line, order)
-            if ok then
-              local cur_indent = get_indent(line)
-              indent_blocks[cur_indent] = indent_blocks[cur_indent] or {}
-              table.insert(indent_blocks[cur_indent], start_row+1)
+  if ts_ok then
+    local bufnr = vim.api.nvim_get_current_buf()
+    local parser = ts.get_parser(bufnr, "markdown")
+    if parser then
+      local tree = parser:parse()[1]
+      if tree then
+        local root = tree:root()
+        local query = vim.treesitter.query.parse("markdown", [[
+          (list) @list
+        ]])
+        for id, node in query:iter_captures(root, bufnr, 0, -1) do
+          if query.captures[id] == "list" then
+            -- 收集该 list 下的所有有序列表项（只处理第一层）
+            local indices = {}
+            local indent = nil
+            for child in node:iter_children() do
+              if child:type() == "list_item" then
+                local start_row, _, _, _ = child:range()
+                local line = lines[start_row+1]
+                if line then
+                  local ok, _ = is_ordered_list(line)
+                  if ok then
+                    table.insert(indices, start_row+1)
+                    if not indent then
+                      indent = get_indent(line)
+                    end
+                  end
+                end
+              end
+            end
+            -- 修正该 list 下的有序列表序号
+            if #indices > 0 and indent ~= nil then
+              local num = 1
+              for _, idx in ipairs(indices) do
+                local pat = "^%s*([%d]+%.)%s+"
+                lines[idx] = lines[idx]:gsub(pat, string.rep(" ", indent) .. tostring(num) .. ". ")
+                num = num + 1
+              end
             end
           end
         end
+        return
       end
-      -- 对每个缩进层级的有序列表块，顺序编号
-      for indent, indices in pairs(indent_blocks) do
-        if #indices > 0 then
-          local _, typ = get_ordered_info(lines[indices[1]])
-          local num = 1
-          for _, idx in ipairs(indices) do
-            local pat = "^%s*([%dAaIi]+%.)%s+"
-            lines[idx] = lines[idx]:gsub(pat, string.rep(" ", indent) .. (typ == "1." and (tostring(num)..".") or next_ordered_number(num-1, typ)) .. " ")
-            num = num + 1
-          end
-        end
+    end
+  end
+  -- fallback: 只支持数字有序列表，按缩进分组
+  local indent_blocks = {}
+  for i = 1, #lines do
+    local ok, marker = is_ordered_list(lines[i])
+    if ok then
+      local cur_indent = get_indent(lines[i])
+      indent_blocks[cur_indent] = indent_blocks[cur_indent] or {}
+      table.insert(indent_blocks[cur_indent], i)
+    end
+  end
+  for indent, indices in pairs(indent_blocks) do
+    if #indices > 0 then
+      local _, typ = get_ordered_info(lines[indices[1]])
+      local num = 1
+      for _, idx in ipairs(indices) do
+        local pat = "^%s*([%d]+%.)%s+"
+        lines[idx] = lines[idx]:gsub(pat, string.rep(" ", indent) .. tostring(num) .. ". ")
+        num = num + 1
       end
     end
   end
@@ -413,7 +379,6 @@ local function auto_new_list_line()
   if #lines == 0 then return end
   local line = lines[1]
   local unorder = list_cfg.unorder or { '-', '*', '+' }
-  local order = list_cfg.order or { '1.', 'a.', 'A.', 'i.', 'I.' }
 
   -- 无序列表/任务
   local is_unorder, marker = is_unordered_list(line, unorder)
@@ -439,8 +404,8 @@ local function auto_new_list_line()
     return true
   end
 
-  -- 有序列表
-  local ok, marker = is_ordered_list(line, order)
+  -- 有序列表（只支持数字）
+  local ok, marker = is_ordered_list(line)
   if ok then
     -- 先插入新行（临时 marker，后续统一修正）
     local indent = line:match("^(%s*)")
@@ -450,8 +415,14 @@ local function auto_new_list_line()
 
     -- 插入后修正同层级所有有序列表序号
     local all_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-    fix_ordered_list(all_lines, order)
-    vim.api.nvim_buf_set_lines(0, 0, -1, false, all_lines)
+    fix_ordered_list(all_lines)
+    -- 只更新有变化的行
+    local orig_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+    for i = 1, #all_lines do
+      if orig_lines[i] ~= all_lines[i] then
+        vim.api.nvim_buf_set_lines(0, i - 1, i, false, { all_lines[i] })
+      end
+    end
 
     -- 重新获取新插入行内容
     local fixed_line = vim.api.nvim_buf_get_lines(0, row, row+1, false)[1]
@@ -476,7 +447,6 @@ local function auto_new_list_line_above()
   if #lines == 0 then return end
   local line = lines[1]
   local unorder = list_cfg.unorder or { '-', '*', '+' }
-  local order = list_cfg.order or { '1.', 'a.', 'A.', 'i.', 'I.' }
 
   -- 无序列表/任务
   local is_unorder, marker = is_unordered_list(line, unorder)
@@ -501,8 +471,8 @@ local function auto_new_list_line_above()
     return true
   end
 
-  -- 有序列表
-  local ok, marker = is_ordered_list(line, order)
+  -- 有序列表（只支持数字）
+  local ok, marker = is_ordered_list(line)
   if ok then
     -- 先插入新行
     local prev_num, typ = get_ordered_info(line)
@@ -513,8 +483,14 @@ local function auto_new_list_line_above()
       vim.api.nvim_buf_set_lines(0, row-1, row-1, false, { new_line })
       -- 修正所有同级有序列表的序号（插入后再修正）
       local all_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-      fix_ordered_list(all_lines, row-1, order)
-      vim.api.nvim_buf_set_lines(0, 0, -1, false, all_lines)
+      fix_ordered_list(all_lines)
+      -- 只更新有变化的行
+      local orig_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+      for i = 1, #all_lines do
+        if orig_lines[i] ~= all_lines[i] then
+          vim.api.nvim_buf_set_lines(0, i - 1, i, false, { all_lines[i] })
+        end
+      end
       -- 重新获取新插入行内容
       local fixed_line = vim.api.nvim_buf_get_lines(0, row-1, row, false)[1]
       local marker_start, marker_end = fixed_line:find("^%s*[%w%.]+%s")
@@ -551,7 +527,6 @@ local function list_indent(direction)
   local all_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
   local lines = vim.api.nvim_buf_get_lines(0, start_row, end_row+1, false)
   local unorder = list_cfg.unorder or { '-', '*', '+' }
-  local order = list_cfg.order or { '1.', 'a.', 'A.', 'i.', 'I.' }
 
   -- 先做缩进/反缩进
   for i, line in ipairs(lines) do
@@ -576,30 +551,13 @@ local function list_indent(direction)
         lines[i] = (indent >= 4 and string.rep(" ", indent-4) or "") .. unorder[cur_idx] .. " " .. content
       end
     else
-      -- 有序
-      local ok, marker = is_ordered_list(line, order)
+      -- 有序（只支持数字）
+      local ok, marker = is_ordered_list(line)
       if ok then
-        local prev_num, typ = get_ordered_info(line)
-        if prev_num and typ then
-          if direction == "indent" then
-            -- 缩进时切换序号类型
-            local next_typ
-            if typ == "1." then
-              next_typ = "a."
-            elseif typ == "a." then
-              next_typ = "A."
-            elseif typ == "A." then
-              next_typ = "i."
-            elseif typ == "i." then
-              next_typ = "I."
-            else
-              next_typ = "a."
-            end
-            lines[i] = string.rep(" ", indent+4) .. next_typ .. line:gsub("^%s*[%dAaIi]+%.", "")
-          else
-            -- 反缩进时恢复为数字序号
-            lines[i] = (indent >= 4 and string.rep(" ", indent-4) or "") .. "1." .. line:gsub("^%s*[%dAaIi]+%.", "")
-          end
+        if direction == "indent" then
+          lines[i] = string.rep(" ", indent+4) .. "1." .. line:gsub("^%s*[%d]+%.", "")
+        else
+          lines[i] = (indent >= 4 and string.rep(" ", indent-4) or "") .. "1." .. line:gsub("^%s*[%d]+%.", "")
         end
       end
     end
@@ -615,7 +573,7 @@ local function list_indent(direction)
   end
 
   -- 缩进/反缩进后，重新修正所有有序列表的序号
-  fix_ordered_list(all_lines, order)
+  fix_ordered_list(all_lines)
 
   -- 只修改有变化的行
   local fixed_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
@@ -644,13 +602,17 @@ local function setup_list_autocmd()
       if row < 2 then return end
       local prev_line = vim.api.nvim_buf_get_lines(0, row-2, row-1, false)[1]
       local cur_line = vim.api.nvim_buf_get_lines(0, row-1, row, false)[1]
+      -- 只在当前行为空且处于插入模式下的 o/O 操作时触发
       if cur_line ~= "" then return end
+      -- 如果是通过删除到行首导致的空行，不自动补全
+      -- 检查光标是否在第0列（行首），且前一行不是列表
+      -- 修正：只有在 col==0 且当前行为空时，才阻止自动补全（即只阻止“删到行首”触发，正常回车不影响）
+      if col == 0 then return end
       local config = get_config()
       local list_cfg = config.action and config.action.list
       local unorder = list_cfg and (list_cfg.unorder or { '-', '*', '+' }) or { '-', '*', '+' }
-      local order = list_cfg and (list_cfg.order or { '1.', 'a.', 'A.', 'i.', 'I.' }) or { '1.', 'a.', 'A.', 'i.', 'I.' }
       local is_unorder = is_unordered_list(prev_line, unorder)
-      local is_order = is_ordered_list(prev_line, order)
+      local is_order = is_ordered_list(prev_line)
       local is_task = is_task_line(prev_line)
       if is_unorder or is_order or is_task then
         -- 删除当前空行，调用自动补全
@@ -667,14 +629,77 @@ local function setup_list_autocmd()
     callback = function()
       -- o
       vim.keymap.set("n", "o", function()
+        local row = vim.api.nvim_win_get_cursor(0)[1]
+        local cur_line = vim.api.nvim_buf_get_lines(0, row-1, row, false)[1]
+        -- 检查是否为“只有序列符号+空格”的新行
+        local is_empty_ordered = cur_line and cur_line:match("^%s*%d+%.%s*$")
+        local is_empty_unordered = cur_line and cur_line:match("^%s*[-*+]%s*$")
+        if is_empty_ordered or is_empty_unordered then
+          -- 删除当前行内容，光标移到行首并进入插入模式
+          vim.api.nvim_buf_set_lines(0, row-1, row, false, {""})
+          vim.api.nvim_win_set_cursor(0, {row, 0})
+          vim.cmd("startinsert!")
+          -- 如果是有序列表，需要重新修正序号
+          if is_empty_ordered then
+            local all_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+            fix_ordered_list(all_lines)
+            local orig_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+            for i = 1, #all_lines do
+              if orig_lines[i] ~= all_lines[i] then
+                vim.api.nvim_buf_set_lines(0, i - 1, i, false, { all_lines[i] })
+              end
+            end
+          end
+          return
+        end
         if not auto_new_list_line() then
-          return vim.api.nvim_feedkeys("o", "n", false)
+          -- 兼容普通回车，手动插入新行并进入插入模式
+          vim.api.nvim_feedkeys("o", "n", false)
         end
       end, { buffer = true, noremap = true, silent = true })
       -- O
       vim.keymap.set("n", "O", function()
         if not auto_new_list_line_above() then
-          return vim.api.nvim_feedkeys("O", "n", false)
+          vim.api.nvim_feedkeys("O", "n", false)
+        end
+      end, { buffer = true, noremap = true, silent = true })
+      -- 回车（insert模式）自动补全列表
+      vim.keymap.set("i", "<CR>", function()
+        local row, col = unpack(vim.api.nvim_win_get_cursor(0))
+        local cur_line = vim.api.nvim_get_current_line()
+        -- 检查是否为“只有序列符号+空格”的新行
+        local is_empty_ordered = cur_line and cur_line:match("^%s*%d+%.%s*$")
+        local is_empty_unordered = cur_line and cur_line:match("^%s*[-*+]%s*$")
+        if is_empty_ordered or is_empty_unordered then
+          -- 删除当前行内容，光标移到行首
+          vim.api.nvim_set_current_line("")
+          vim.api.nvim_win_set_cursor(0, {row, 0})
+          -- 如果是有序列表，需要重新修正序号
+          if is_empty_ordered then
+            local all_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+            fix_ordered_list(all_lines)
+            local orig_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+            for i = 1, #all_lines do
+              if orig_lines[i] ~= all_lines[i] then
+                vim.api.nvim_buf_set_lines(0, i - 1, i, false, { all_lines[i] })
+              end
+            end
+          end
+          return
+        end
+        -- 仅当当前行为有序/无序/任务列表时，才自动补全
+        local config = get_config()
+        local list_cfg = config.action and config.action.list
+        local unorder = list_cfg and (list_cfg.unorder or { '-', '*', '+' }) or { '-', '*', '+' }
+        local is_unorder = is_unordered_list(cur_line, unorder)
+        local is_order = is_ordered_list(cur_line)
+        local is_task = is_task_line(cur_line)
+        if is_unorder or is_order or is_task then
+          -- 只自动补全，不再发送原始<CR>，避免多出一行
+          auto_new_list_line()
+        else
+          -- 普通回车
+          vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<CR>", true, false, true), "n", false)
         end
       end, { buffer = true, noremap = true, silent = true })
       -- visual 模式下 >/< 一下即可缩进/反缩进
