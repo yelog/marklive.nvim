@@ -92,7 +92,23 @@ render._init_visible = function(namespace, config, query, regex_list)
   vim.api.nvim_buf_clear_namespace(0, namespace, 0, -1)
 
   local filetype = vim.bo.filetype
-  if filetype ~= "markdown" then
+  local valid_filetypes = require('marklive').config.filetype
+  if type(valid_filetypes) == "string" then
+    valid_filetypes = { valid_filetypes }
+  end
+  -- 统一 filetype 大小写
+  local filetype_lower = string.lower(filetype)
+  local found = false
+  for _, ft in ipairs(valid_filetypes) do
+    if filetype_lower == string.lower(ft) then
+      found = true
+      break
+    end
+  end
+  -- print("[marklive] 当前 filetype: " .. tostring(filetype) .. "，是否满足要求: " .. tostring(found))
+  if not found then
+    -- print("[marklive] filetype 未命中，当前 filetype: " ..
+    --   tostring(filetype) .. "，配置 filetype 列表: " .. vim.inspect(valid_filetypes))
     return
   end
   local bufnr = vim.api.nvim_get_current_buf()
@@ -104,10 +120,42 @@ render._init_visible = function(namespace, config, query, regex_list)
   local botline = vim.fn.line('w$')     -- 1-based
 
   local ts = vim.treesitter
-  local parser = ts.get_parser(bufnr, filetype)
+  local parser
+  local ts_lang = filetype
+  local ok, err = pcall(function()
+    parser = ts.get_parser(bufnr, ts_lang)
+  end)
+  if not ok or not parser then
+    ts_lang = "markdown"
+    ok, err = pcall(function()
+      parser = ts.get_parser(bufnr, ts_lang)
+    end)
+    if not ok or not parser then
+      -- markdown 也失败，直接返回
+      return
+    end
+  end
+
   local tree = parser:parse()[1]
   local root = tree:root()
-  local query_obj = ts.query.parse(filetype, query)
+  local query_obj
+  ok, err = pcall(function()
+    query_obj = ts.query.parse(ts_lang, query)
+  end)
+  if not ok or not query_obj then
+    -- 解析 query 失败，尝试用 markdown 解析
+    if ts_lang ~= "markdown" then
+      ts_lang = "markdown"
+      ok, err = pcall(function()
+        query_obj = ts.query.parse(ts_lang, query)
+      end)
+      if not ok or not query_obj then
+        return
+      end
+    else
+      return
+    end
+  end
 
   for id, node in query_obj:iter_captures(root, bufnr, topline, botline) do
     local name = query_obj.captures[id]

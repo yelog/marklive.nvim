@@ -37,6 +37,14 @@ M.setup = function(config)
     end
   end
 
+  if M.config.highlight_config then
+    for name, config in pairs(M.config.highlight_config) do
+      if config.highlight ~= nil then
+        vim.api.nvim_set_hl(0, name, config.highlight)
+      end
+    end
+  end
+
   -- conceal config
   vim.wo.conceallevel = 2
   vim.wo.cole = vim.wo.conceallevel
@@ -65,7 +73,7 @@ M.enable = function()
   M.config.enable = true
 
   -- set highlight
-  utils.setHighlight(M.config.highlight_config or {}, M.config.filetype)
+  utils.setHighlight(M.config.highlight_config or {}, vim.o.filetype)
 
   vim.cmd [[
         augroup Marklive
