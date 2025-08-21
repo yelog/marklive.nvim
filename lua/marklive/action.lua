@@ -545,7 +545,12 @@ local function list_indent(direction)
   local lines = vim.api.nvim_buf_get_lines(0, start_row, end_row+1, false)
   local unorder = list_cfg.unorder or { '-', '*', '+' }
 
+  -- 记录光标原始列
+  local orig_cursor = vim.api.nvim_win_get_cursor(0)
+  local orig_col = orig_cursor[2]
+
   -- 先做缩进/反缩进
+  local indent_delta = 0
   for i, line in ipairs(lines) do
     local idx = i + start_row - 1
     local indent = get_indent(line)
@@ -561,11 +566,13 @@ local function list_indent(direction)
         cur_idx = (cur_idx) % #unorder + 1
         local content = line:gsub("^%s*[-*+]%s*", "")
         lines[i] = string.rep(" ", indent+4) .. unorder[cur_idx] .. " " .. content
+        if i == 1 then indent_delta = 4 end
       else
         -- 反缩进时切换为上一个无序列表类型
         cur_idx = (cur_idx - 2 + #unorder) % #unorder + 1
         local content = line:gsub("^%s*[-*+]%s*", "")
         lines[i] = (indent >= 4 and string.rep(" ", indent-4) or "") .. unorder[cur_idx] .. " " .. content
+        if i == 1 then indent_delta = (indent >= 4) and -4 or 0 end
       end
     else
       -- 有序（只支持数字）
@@ -573,8 +580,10 @@ local function list_indent(direction)
       if ok then
         if direction == "indent" then
           lines[i] = string.rep(" ", indent+4) .. "1." .. line:gsub("^%s*[%d]+%.", "")
+          if i == 1 then indent_delta = 4 end
         else
           lines[i] = (indent >= 4 and string.rep(" ", indent-4) or "") .. "1." .. line:gsub("^%s*[%d]+%.", "")
+          if i == 1 then indent_delta = (indent >= 4) and -4 or 0 end
         end
       end
     end
@@ -598,6 +607,12 @@ local function list_indent(direction)
     if fixed_lines[i] ~= all_lines[i] then
       vim.api.nvim_buf_set_lines(0, i - 1, i, false, { all_lines[i] })
     end
+  end
+
+  -- 缩进后移动光标
+  if indent_delta ~= 0 and mode ~= "v" and mode ~= "V" and mode ~= "\22" then
+    local new_col = math.max(0, orig_col + indent_delta)
+    vim.api.nvim_win_set_cursor(0, { orig_cursor[1], new_col })
   end
 end
 
