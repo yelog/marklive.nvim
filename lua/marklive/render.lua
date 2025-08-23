@@ -88,16 +88,7 @@ render.block_quote = function(rc)
   local bg = hl_def and hl_def.bg and string.format("#%06x", hl_def.bg) or nil
 
   -- 判断首行是否为 callout
-  local first_line = lines[1]
-  local is_callout = false
-  if first_line:match("^%s*>%s*%[!%u+%]") then
-    is_callout = true
-  end
-
-  -- 如果是 callout，直接返回，不做 block_quote 渲染
-  if is_callout then
-    return
-  end
+  -- 已移除 callout 跳过逻辑，所有 block_quote 都直接渲染
 
   for i, line in ipairs(lines) do
     local lnum = start_row + i - 1
