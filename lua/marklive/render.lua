@@ -69,6 +69,128 @@ end
 -- end
 
 
+-- 自定义 block_quote 渲染
+render.block_quote = function(rc)
+  -- rc: { bufnr, namespace, hl_group, line, win_width, icon, start_row, start_col, end_row, end_col }
+  local bufnr = rc.bufnr
+  local namespace = rc.namespace
+  local icon = rc.icon
+  local hl_group = rc.hl_group
+  local start_row = rc.start_row
+  local end_row = rc.end_row
+  local config = rc.config or require("marklive").config
+  local lines = vim.api.nvim_buf_get_lines(bufnr, start_row, end_row, false)
+  if #lines == 0 then return end
+
+  -- 获取高亮组的 fg 和 bg
+  local hl_def = vim.api.nvim_get_hl(0, { name = hl_group, link = false })
+  local fg = hl_def and hl_def.fg and string.format("#%06x", hl_def.fg) or nil
+  local bg = hl_def and hl_def.bg and string.format("#%06x", hl_def.bg) or nil
+
+  -- 判断首行是否为 callout
+  local first_line = lines[1]
+  local is_callout = false
+  if first_line:match("^%s*>%s*%[!%u+%]") then
+    is_callout = true
+  end
+
+  -- 如果是 callout，直接返回，不做 block_quote 渲染
+  if is_callout then
+    return
+  end
+
+  for i, line in ipairs(lines) do
+    local lnum = start_row + i - 1
+    -- 查找第一个 '>'，并替换为 icon
+    local gt_start, gt_end = line:find("^%s*>")
+    if gt_start and gt_end then
+      -- 替换第一个 '>' 为 icon，设置 fg
+      vim.api.nvim_buf_set_extmark(bufnr, namespace, lnum, gt_start - 1, {
+        end_line = lnum,
+        end_col = gt_end,
+        conceal = icon,
+        hl_group = hl_group,
+        priority = 0,
+      })
+    end
+
+    -- 只为没有背景色的区域设置 block_quote 的背景色
+    if bg then
+      local line_content = vim.api.nvim_buf_get_lines(bufnr, lnum, lnum + 1, false)[1] or ""
+      local line_byte_len = string.len(line_content)
+      local win_width = vim.api.nvim_win_get_width(0)
+      local line_len = vim.fn.strdisplaywidth(line_content)
+
+      -- 1. 检查当前行是否有高亮覆盖（如 bold/code/inline 等），只为没有 bg 的区域设置 block_quote 的 bg
+      -- 方案：遍历当前 buffer 的 extmarks，找出有 bg 的区间，补全无 bg 区间
+      local extmarks = vim.api.nvim_buf_get_extmarks(bufnr, -1, {lnum, 0}, {lnum, -1}, {details=true})
+      local bg_ranges = {}
+      for _, ext in ipairs(extmarks) do
+        local det = ext[4]
+        if det and det.hl_group then
+          local hl = vim.api.nvim_get_hl(0, { name = det.hl_group, link = false })
+          if hl and hl.bg then
+            local s = det.col or 0
+            local e = det.end_col or ((det.col and det.col + 1) or 0)
+            if s ~= e then
+              table.insert(bg_ranges, {s, e})
+            end
+          end
+        end
+      end
+      -- 合并重叠区间
+      table.sort(bg_ranges, function(a, b) return a[1] < b[1] end)
+      local merged = {}
+      for _, r in ipairs(bg_ranges) do
+        if #merged == 0 or merged[#merged][2] < r[1] then
+          table.insert(merged, {r[1], r[2]})
+        else
+          merged[#merged][2] = math.max(merged[#merged][2], r[2])
+        end
+      end
+
+      -- 2. 为没有 bg 的区间设置 block_quote 的 bg（只设置 bg，不设置 fg，避免覆盖原有文字颜色）
+      local group_name = "MarkliveBlockquoteBgOnly"
+      -- 动态注册只带 bg 的高亮组
+      if bg then
+        local ok = pcall(function()
+          vim.api.nvim_set_hl(0, group_name, { bg = tonumber(bg:sub(2), 16) })
+        end)
+      end
+
+      local last = 0
+      for _, r in ipairs(merged) do
+        if last < r[1] then
+          vim.api.nvim_buf_set_extmark(bufnr, namespace, lnum, last, {
+            end_line = lnum,
+            end_col = r[1],
+            hl_group = group_name,
+            hl_mode = "combine",
+          })
+        end
+        last = r[2]
+      end
+      if last < line_byte_len then
+        vim.api.nvim_buf_set_extmark(bufnr, namespace, lnum, last, {
+          end_line = lnum,
+          end_col = line_byte_len,
+          hl_group = group_name,
+          hl_mode = "combine",
+        })
+      end
+
+      -- 3. 如果内容行宽度小于窗口宽度，补全背景色到整行
+      if line_len < win_width then
+        vim.api.nvim_buf_set_extmark(bufnr, namespace, lnum, line_byte_len, {
+          virt_text = { { string.rep(" ", win_width - line_len), group_name } },
+          virt_text_pos = "overlay",
+          hl_mode = "combine",
+        })
+      end
+    end
+  end
+end
+
 -- 节流渲染实现
 local render_timer = nil
 render.throttle_init = function(namespace, config, query, regex_list)

@@ -29,7 +29,7 @@ return {
       highlight = { fg = "#00c4b0", bg = "#1f262f" }
     },
     markdownBlockquote = {
-      highlight = { fg = '#e6e1cf' }
+      highlight = { fg = '#e6e1cf', bg = "#000000" }
     },
     markdownFootnote = {
       highlight = { fg = '#5c92fa' }
@@ -211,14 +211,9 @@ return {
       hl_group = 'MarkliveCodeblock',
       render = 'code_block'
     },
-    block_quote_marker = { -- Block quote
-      -- icon = "┃",
+    block_quote = { -- Block quote
       icon = "▋",
-      query = { "(block_quote_marker) @block_quote_marker",
-        "(block_quote (paragraph (inline (block_continuation) @block_quote_marker)))",
-        "(block_quote (paragraph (block_continuation) @block_quote_marker))",
-        "(block_quote (block_continuation) @block_quote_marker)" },
-      -- hl_fill = true,
+      render = "block_quote",
       hl_group = 'markdownBlockquote'
     },
     callout_note = {
