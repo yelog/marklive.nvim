@@ -180,9 +180,25 @@ render.block_quote = function(rc)
                 })
               end
             end
+            -- conceal [!key] 中的所有空格
+            local key_match = line:match("(%[![%w_%-]+%])")
+            if key_match then
+              local key_start = line:find(key_match, 1, true)
+              for idx = 1, #key_match do
+                if key_match:sub(idx, idx) == " " then
+                  vim.api.nvim_buf_set_extmark(bufnr, namespace, lnum, key_start + idx - 2, {
+                    end_line = lnum,
+                    end_col = key_start + idx - 1,
+                    conceal = "",
+                    hl_group = callout_hl_group,
+                    priority = 2,
+                  })
+                end
+              end
+            end
           end
         else
-          -- [!key] 后有内容，如 > [!note] 注意
+          -- [!key] 后有内容，如 > [!note] 标题
           -- 1. conceal [ 替换为 icon
           local s1, e1 = line:find("%[")
           if s1 and e1 then
@@ -205,18 +221,7 @@ render.block_quote = function(rc)
               priority = 0,
             })
           end
-          -- 3. conceal ] 替换为 ''
-          local s2, e2 = line:find("%]", (e_ex or 0) + 1)
-          if s2 and e2 then
-            vim.api.nvim_buf_set_extmark(bufnr, namespace, lnum, s2-1, {
-              end_line = lnum,
-              end_col = e2,
-              conceal = "",
-              hl_group = callout_hl_group,
-              priority = 0,
-            })
-          end
-          -- 4. conceal key（如 note），每个字符单独conceal，首字母大写，其余小写
+          -- 3. conceal key（如 note），每个字符单独conceal，首字母大写，其余小写
           local key_str = line:match("%[!([%w_%-]+)%]")
           if key_str then
             local key_disp = key_str:sub(1,1):upper() .. key_str:sub(2):lower()
@@ -228,15 +233,40 @@ render.block_quote = function(rc)
                 vim.api.nvim_buf_set_extmark(bufnr, namespace, lnum, char_col-1, {
                   end_line = lnum,
                   end_col = char_col,
-                  conceal = disp_c,
+                  conceal = "",
                   hl_group = callout_hl_group,
                   priority = 0,
                 })
               end
             end
           end
-          -- 5. 对自定义标题设置高亮
+          -- 4. conceal ] 替换为 ''
+          local s2, e2 = line:find("%]", (e_ex or 0) + 1)
+          if s2 and e2 then
+            vim.api.nvim_buf_set_extmark(bufnr, namespace, lnum, s2-1, {
+              end_line = lnum,
+              end_col = e2,
+              conceal = "",
+              hl_group = callout_hl_group,
+              priority = 0,
+            })
+          end
+          -- 5. 对自定义标题设置高亮，并将标题中的所有空格 conceal 掉
           if s2 and #line > e2 then
+            -- conceal 标题中的所有空格
+            local after_title = line:sub(e2 + 1)
+            local offset = e2
+            for idx = 1, #after_title do
+              if after_title:sub(idx, idx) == " " then
+                vim.api.nvim_buf_set_extmark(bufnr, namespace, lnum, offset + idx - 1, {
+                  end_line = lnum,
+                  end_col = offset + idx,
+                  conceal = "",
+                  hl_group = callout_hl_group,
+                  priority = 2,
+                })
+              end
+            end
             vim.api.nvim_buf_set_extmark(bufnr, namespace, lnum, e2, {
               end_line = lnum,
               end_col = #line,
