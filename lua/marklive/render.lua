@@ -90,17 +90,28 @@ render.block_quote = function(rc)
   -- 判断首行是否为 callout
   -- 如果 config.render.block_quote.callout 配置不为空，且首行为 > [!xxx]，则使用对应 callout 的 hl_group
   local callout_hl_group = nil
+  local callout_icon = nil
+  local callout_key = nil
+  local callout_fg = nil
+  local callout_match_content = nil
   if config and config.render and config.render.block_quote and config.render.block_quote.callout then
     local first_line = lines[1]
-    local callout_match = first_line:match("^%s*>%s*%[!([%w_%-]+)%]")
+    local callout_match, after = first_line:match("^%s*>%s*%[!([%w_%-]+)%](.*)")
     if callout_match then
-      local callout_key = string.lower(callout_match)
+      callout_key = string.lower(callout_match)
       for k, v in pairs(config.render.block_quote.callout) do
-        if string.lower(k) == callout_key and v.hl_group then
+        if string.lower(k) == callout_key then
           callout_hl_group = v.hl_group
+          callout_icon = v.icon
+          -- 获取高亮组的 fg
+          if v.hl_group then
+            local hl_def = vim.api.nvim_get_hl(0, { name = v.hl_group, link = false })
+            callout_fg = hl_def and hl_def.fg and string.format("#%06x", hl_def.fg) or nil
+          end
           break
         end
       end
+      callout_match_content = after
     end
   end
   local use_hl_group = callout_hl_group or hl_group
@@ -110,14 +121,110 @@ render.block_quote = function(rc)
     -- 查找第一个 '>'，并替换为 icon
     local gt_start, gt_end = line:find("^%s*>")
     if gt_start and gt_end then
-      -- 替换第一个 '>' 为 icon，设置 fg
-      vim.api.nvim_buf_set_extmark(bufnr, namespace, lnum, gt_start - 1, {
-        end_line = lnum,
-        end_col = gt_end,
-        conceal = icon,
-        hl_group = use_hl_group,
-        priority = 0,
-      })
+      -- callout 特殊渲染逻辑（仅首行）
+      if i == 1 and callout_icon and callout_key then
+        -- 判断 [!key] 后是否有内容
+        local after = callout_match_content or ""
+        if after:match("^%s*$") then
+          -- 仅 [!key]，如 > [!note]
+          -- 1. conceal [ 替换为 icon
+          local s1, e1 = line:find("%[")
+          if s1 and e1 then
+            vim.api.nvim_buf_set_extmark(bufnr, namespace, lnum, s1-1, {
+              end_line = lnum,
+              end_col = e1,
+              conceal = callout_icon,
+              hl_group = callout_hl_group,
+              priority = 0,
+            })
+          end
+          -- 2. conceal ! 替换为空格
+          local s_ex, e_ex = line:find("!", (e1 or 0) + 1)
+          if s_ex and e_ex then
+            vim.api.nvim_buf_set_extmark(bufnr, namespace, lnum, s_ex-1, {
+              end_line = lnum,
+              end_col = e_ex,
+              conceal = " ",
+              hl_group = callout_hl_group,
+              priority = 0,
+            })
+          end
+          -- 3. conceal ] 替换为 ''
+          local s2, e2 = line:find("%]", (e_ex or 0) + 1)
+          if s2 and e2 then
+            vim.api.nvim_buf_set_extmark(bufnr, namespace, lnum, s2-1, {
+              end_line = lnum,
+              end_col = e2,
+              conceal = "",
+              hl_group = callout_hl_group,
+              priority = 0,
+            })
+          end
+          -- 4. conceal key（如 note），每个字符单独conceal，首字母大写，其余小写
+          local key_str = line:match("%[!([%w_%-]+)%]")
+          if key_str then
+            local key_disp = key_str:sub(1,1):upper() .. key_str:sub(2):lower()
+            for idx = 1, #key_str do
+              local c = key_str:sub(idx, idx)
+              local disp_c = idx == 1 and key_disp:sub(1,1) or key_disp:sub(idx,idx)
+              -- 找到字符在line中的位置
+              local key_start = line:find("%[!"..key_str.."%]")
+              if key_start then
+                local char_col = key_start + 1 + idx -- [! 占2位
+                vim.api.nvim_buf_set_extmark(bufnr, namespace, lnum, char_col-1, {
+                  end_line = lnum,
+                  end_col = char_col,
+                  conceal = disp_c,
+                  hl_group = callout_hl_group,
+                  priority = 0,
+                })
+              end
+            end
+          end
+        else
+          -- [!key] 后有内容，如 > [!note] 注意
+          local content = vim.trim(after)
+          local conceal_str = callout_icon .. " " .. content
+          local s, e = line:find("%[!%w+%]%s*")
+          if s and e then
+            -- 先用 conceal 替换为 icon+空格+内容
+            vim.api.nvim_buf_set_extmark(bufnr, namespace, lnum, s-1, {
+              end_line = lnum,
+              end_col = e,
+              conceal = conceal_str,
+              hl_group = callout_hl_group,
+              priority = 0,
+            })
+            -- 再单独为内容部分设置前景色
+            if #content > 0 and callout_fg then
+              local content_start = s - 1 + #callout_icon + 1 -- icon + 空格
+              vim.api.nvim_buf_set_extmark(bufnr, namespace, lnum, content_start, {
+                end_line = lnum,
+                end_col = content_start + #content,
+                hl_group = callout_hl_group,
+                priority = 1,
+              })
+            end
+          end
+        end
+        -- 依然渲染 block_quote 的 icon
+        vim.api.nvim_buf_set_extmark(bufnr, namespace, lnum, gt_start - 1, {
+          end_line = lnum,
+          end_col = gt_end,
+          conceal = icon,
+          hl_group = use_hl_group,
+          priority = 0,
+        })
+      else
+        -- 普通 block_quote 渲染
+        vim.api.nvim_buf_set_extmark(bufnr, namespace, lnum, gt_start - 1, {
+          end_line = lnum,
+          end_col = gt_end,
+          conceal = icon,
+          hl_group = use_hl_group,
+          priority = 0,
+        })
+      end
     end
 
     -- 只为没有背景色的区域设置 block_quote 的背景色
