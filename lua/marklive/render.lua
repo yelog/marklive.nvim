@@ -88,7 +88,22 @@ render.block_quote = function(rc)
   local bg = hl_def and hl_def.bg and string.format("#%06x", hl_def.bg) or nil
 
   -- 判断首行是否为 callout
-  -- 已移除 callout 跳过逻辑，所有 block_quote 都直接渲染
+  -- 如果 config.render.block_quote.callout 配置不为空，且首行为 > [!xxx]，则使用对应 callout 的 hl_group
+  local callout_hl_group = nil
+  if config and config.render and config.render.block_quote and config.render.block_quote.callout then
+    local first_line = lines[1]
+    local callout_match = first_line:match("^%s*>%s*%[!([%w_%-]+)%]")
+    if callout_match then
+      local callout_key = string.lower(callout_match)
+      for k, v in pairs(config.render.block_quote.callout) do
+        if string.lower(k) == callout_key and v.hl_group then
+          callout_hl_group = v.hl_group
+          break
+        end
+      end
+    end
+  end
+  local use_hl_group = callout_hl_group or hl_group
 
   for i, line in ipairs(lines) do
     local lnum = start_row + i - 1
@@ -100,7 +115,7 @@ render.block_quote = function(rc)
         end_line = lnum,
         end_col = gt_end,
         conceal = icon,
-        hl_group = hl_group,
+        hl_group = use_hl_group,
         priority = 0,
       })
     end

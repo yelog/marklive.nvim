@@ -214,27 +214,25 @@ return {
     block_quote = { -- Block quote
       icon = "▋",
       render = "block_quote",
-      hl_group = 'markdownBlockquote'
-    },
-    callout_note = {
-      icon = { '', ' ', 'N', 'o', 't', 'e', '' },
-      regex = ">%s(%[)(!)(N)(O)(T)(E)(%])",
-      hl_group = 'markliveCalloutNote',
-    },
-    callout_error = {
-      icon = { '', ' ', 'E', 'r', 'r', 'o', 'r', '' },
-      regex = ">%s(%[)(!)(E)(R)(R)(O)(R)(%])",
-      hl_group = 'markliveCalloutError',
-    },
-    callout_tip = {
-      icon = { '󰛨', ' ', 'T', 'i', 'p', '' },
-      regex = ">%s(%[)(!)(T)(I)(P)(%])",
-      hl_group = 'markliveCalloutTip',
-    },
-    callout_warning = {
-      icon = { '', ' ', 'W', 'a', 'r', 'n', 'i', 'n', 'g', '' },
-      regex = ">%s(%[)(!)(W)(A)(R)(N)(I)(N)(G)(%])",
-      hl_group = 'markliveCalloutWarning',
+      hl_group = 'markdownBlockquote',
+      callout = {
+        note = {
+          icon = '',
+          hl_group = 'markliveCalloutNote',
+        },
+        error = {
+          icon = '',
+          hl_group = 'markliveCalloutError',
+        },
+        tip = {
+          icon = '󰛨',
+          hl_group = 'markliveCalloutTip',
+        },
+        warning = {
+          icon = '',
+          hl_group = 'markliveCalloutWarning',
+        }
+      }
     },
     atx_h1_marker = { -- Heading 1
       icon = "󰉫",
