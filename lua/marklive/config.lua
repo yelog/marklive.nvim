@@ -86,20 +86,16 @@ return {
       highlight = { fg = '#FC7A07' }
     },
     markliveCalloutNote = {
-      matchadd = "\\v> \\[!]NOTE\\]",
-      highlight = { fg = '#047AFF' }
+      highlight = { fg = '#047AFF', bg = "#23283B" }
     },
     markliveCalloutError = {
-      matchadd = "\\v> \\[!]ERROR\\]",
-      highlight = { fg = '#FB464C' }
+      highlight = { fg = '#FB464C', bg = "#2E202A" }
     },
     markliveCalloutTip = {
-      matchadd = "\\v> \\[!]TIP\\]",
-      highlight = { fg = '#53DFDD' }
+      highlight = { fg = '#53DFDD', bg = "#242D3C" }
     },
     markliveCalloutWarning = {
-      matchadd = "\\v> \\[!]WARNING\\]",
-      highlight = { fg = '#E9973F' }
+      highlight = { fg = '#E9973F', bg = "#31292C" }
     }
   },
   render = {

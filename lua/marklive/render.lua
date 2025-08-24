@@ -114,7 +114,16 @@ render.block_quote = function(rc)
       callout_match_content = after
     end
   end
+  -- 优先使用 callout 的 hl_group 和 bg
   local use_hl_group = callout_hl_group or hl_group
+  local use_bg = nil
+  if callout_hl_group then
+    local callout_hl = vim.api.nvim_get_hl(0, { name = callout_hl_group, link = false })
+    use_bg = callout_hl and callout_hl.bg and string.format("#%06x", callout_hl.bg) or nil
+  end
+  if not use_bg then
+    use_bg = bg
+  end
 
   for i, line in ipairs(lines) do
     local lnum = start_row + i - 1
@@ -296,7 +305,8 @@ render.block_quote = function(rc)
     end
 
     -- 只为没有背景色的区域设置 block_quote 的背景色
-    if bg then
+    local bg_to_use = use_bg or bg
+    if bg_to_use then
       local line_content = vim.api.nvim_buf_get_lines(bufnr, lnum, lnum + 1, false)[1] or ""
       local line_byte_len = string.len(line_content)
       local win_width = vim.api.nvim_win_get_width(0)
@@ -332,14 +342,22 @@ render.block_quote = function(rc)
 
       -- 2. 为没有 bg 的区间设置 block_quote 的 bg（只设置 bg，不设置 fg，避免覆盖原有文字颜色）
       local group_name = "MarkliveBlockquoteBgOnly"
+      if callout_key then
+        group_name = "MarkliveBlockquoteBgOnly_" .. callout_key
+      end
       -- 动态注册只带 bg 的高亮组
-      if bg then
+      if bg_to_use then
         local ok = pcall(function()
-          vim.api.nvim_set_hl(0, group_name, { bg = tonumber(bg:sub(2), 16) })
+          vim.api.nvim_set_hl(0, group_name, { bg = tonumber(bg_to_use:sub(2), 16) })
         end)
       end
 
       local last = 0
+      -- 修复：callout 首行第一个空格的背景色问题
+      -- 如果是 callout 且当前行为首行，强制 last=0，merged 为空，直接整行都用 callout 的 bg
+      if callout_key and i == 1 then
+        merged = {}
+      end
       for _, r in ipairs(merged) do
         if last < r[1] then
           vim.api.nvim_buf_set_extmark(bufnr, namespace, lnum, last, {
