@@ -718,19 +718,35 @@ local function setup_list_autocmd()
         local is_empty_unordered = cur_line and cur_line:match("^%s*[-*+]%s*$")
         local is_empty_task = cur_line and cur_line:match("^%s*[-*+]%s+%[ %]%s*$")
         if is_empty_ordered or is_empty_unordered or is_empty_task then
-          -- 删除当前行内容，光标移到行首
-          vim.api.nvim_set_current_line("")
-          vim.api.nvim_win_set_cursor(0, { row, 0 })
-          -- 如果是有序列表，需要重新修正序号
-          if is_empty_ordered then
-            local all_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-            fix_ordered_list(all_lines)
-            local orig_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-            for i = 1, #all_lines do
-              if orig_lines[i] ~= all_lines[i] then
-                vim.api.nvim_buf_set_lines(0, i - 1, i, false, { all_lines[i] })
+          -- 判断当前缩进
+          local indent = #(cur_line:match("^(%s*)") or "")
+          if indent == 0 then
+            -- 顶层，删除当前行内容，光标移到行首
+            vim.api.nvim_set_current_line("")
+            vim.api.nvim_win_set_cursor(0, { row, 0 })
+            -- 如果是有序列表，需要重新修正序号
+            if is_empty_ordered then
+              local all_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+              fix_ordered_list(all_lines)
+              local orig_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+              for i = 1, #all_lines do
+                if orig_lines[i] ~= all_lines[i] then
+                  vim.api.nvim_buf_set_lines(0, i - 1, i, false, { all_lines[i] })
+                end
               end
             end
+          else
+            -- 子层级，减少缩进一级
+            local new_line = cur_line:gsub("^%s+", function(s)
+              if #s <= 4 then
+                return ""
+              else
+                return string.rep(" ", #s - 4)
+              end
+            end)
+            vim.api.nvim_set_current_line(new_line)
+            -- 光标移动到新行行尾
+            vim.api.nvim_win_set_cursor(0, { row, #new_line })
           end
           return
         end
