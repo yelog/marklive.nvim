@@ -716,7 +716,8 @@ local function setup_list_autocmd()
         -- 检查是否为“只有序列符号+空格”的新行
         local is_empty_ordered = cur_line and cur_line:match("^%s*%d+%.%s*$")
         local is_empty_unordered = cur_line and cur_line:match("^%s*[-*+]%s*$")
-        if is_empty_ordered or is_empty_unordered then
+        local is_empty_task = cur_line and cur_line:match("^%s*[-*+]%s+%[ %]%s*$")
+        if is_empty_ordered or is_empty_unordered or is_empty_task then
           -- 删除当前行内容，光标移到行首
           vim.api.nvim_set_current_line("")
           vim.api.nvim_win_set_cursor(0, { row, 0 })
