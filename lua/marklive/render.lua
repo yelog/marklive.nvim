@@ -379,12 +379,24 @@ render.block_quote = function(rc)
       end
 
       -- 3. 如果内容行宽度小于窗口宽度，补全背景色到整行
+      --    如果内容行超出窗口宽度（wrap 软折行），则为最后一个显示行的剩余列补齐背景色
       if line_len < win_width then
         vim.api.nvim_buf_set_extmark(bufnr, namespace, lnum, line_byte_len, {
           virt_text = { { string.rep(" ", win_width - line_len), group_name } },
           virt_text_pos = "overlay",
           hl_mode = "combine",
         })
+      else
+        -- 软折行：line_len >= win_width
+        -- 计算最后一段显示行的剩余列数；若刚好整除则无需补齐
+        local remainder = line_len % win_width
+        if remainder ~= 0 then
+          vim.api.nvim_buf_set_extmark(bufnr, namespace, lnum, line_byte_len, {
+            virt_text = { { string.rep(" ", win_width - remainder), group_name } },
+            virt_text_pos = "overlay",
+            hl_mode = "combine",
+          })
+        end
       end
     end
   end
