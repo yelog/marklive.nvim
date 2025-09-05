@@ -705,7 +705,20 @@ local function setup_list_autocmd()
       end, { buffer = true, noremap = true, silent = true })
       -- O
       vim.keymap.set("n", "O", function()
-        if not auto_new_list_line_above() then
+        -- 只在当前行本身是列表/任务时才尝试智能补全上一行
+        local cur_line = vim.api.nvim_get_current_line()
+        local config = get_config()
+        local list_cfg = config.action and config.action.list
+        local unorder = list_cfg and (list_cfg.unorder or { '-', '*', '+' }) or { '-', '*', '+' }
+        local is_unorder, _ = is_unordered_list(cur_line, unorder)
+        local is_order = is_ordered_list(cur_line)
+        local is_task = is_task_line(cur_line)
+        if is_unorder or is_order or is_task then
+          if not auto_new_list_line_above() then
+            vim.api.nvim_feedkeys("O", "n", false)
+          end
+        else
+          -- 当前行不是列表（例如位于列表块下方的空行），保持原生 O 行为
           vim.api.nvim_feedkeys("O", "n", false)
         end
       end, { buffer = true, noremap = true, silent = true })
