@@ -26,6 +26,7 @@ return {
       highlight = { fg = '#5c92fa', underline = true }
     },
     markdownCode = {
+      matchadd = "\\v`[^`\\n]+`",
       highlight = { fg = "#00c4b0", bg = "#1f262f" }
     },
     markdownBlockquote = {
@@ -192,6 +193,7 @@ return {
     },
     mark = {
       regex = "(<mark>).-(</mark>)",
+      hl_group = 'markliveMarkText',
     },
     thematic_break = { -- divider
       icon = '─',
