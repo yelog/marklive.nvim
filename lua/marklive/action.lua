@@ -787,6 +787,17 @@ local function setup_list_autocmd()
               end
             end
             vim.api.nvim_set_current_line(new_line)
+            -- 如果是有序列表空行的反缩进，需要重新修正父/子两层的序号
+            if is_empty_ordered then
+              local all_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+              fix_ordered_list(all_lines)
+              local orig_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+              for i = 1, #all_lines do
+                if orig_lines[i] ~= all_lines[i] then
+                  vim.api.nvim_buf_set_lines(0, i - 1, i, false, { all_lines[i] })
+                end
+              end
+            end
             -- 光标移动到新行行尾
             vim.api.nvim_win_set_cursor(0, { row, #new_line })
           end
