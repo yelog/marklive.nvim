@@ -445,12 +445,36 @@ render._init_visible = function(namespace, config, query, regex_list)
     return
   end
   local bufnr = vim.api.nvim_get_current_buf()
-  local width = vim.api.nvim_win_get_width(0)
 
-  -- 获取可见行范围
-  local win = vim.api.nvim_get_current_win()
-  local topline = vim.fn.line('w0') - 1 -- 0-based
-  local botline = vim.fn.line('w$')     -- 1-based
+  -- 收集所有显示该 buffer 的窗口的可视行范围 (0-based start, 1-based end)，并合并
+  local visible_ranges = {}
+  local max_width = 0
+  for _, winid in ipairs(vim.api.nvim_list_wins()) do
+    if vim.api.nvim_win_get_buf(winid) == bufnr then
+      vim.api.nvim_win_call(winid, function()
+        local tl = vim.fn.line('w0') - 1      -- 0-based
+        local bl = vim.fn.line('w$')          -- 1-based (treesitter 结束行使用独占行号, 直接复用)
+        table.insert(visible_ranges, { tl, bl })
+        local w = vim.api.nvim_win_get_width(0)
+        if w > max_width then max_width = w end
+      end)
+    end
+  end
+  if #visible_ranges == 0 then return end
+
+  table.sort(visible_ranges, function(a, b) return a[1] < b[1] end)
+  local merged_ranges = {}
+  for _, r in ipairs(visible_ranges) do
+    if #merged_ranges == 0 or merged_ranges[#merged_ranges][2] < r[1] then
+      table.insert(merged_ranges, { r[1], r[2] })
+    else
+      if r[2] > merged_ranges[#merged_ranges][2] then
+        merged_ranges[#merged_ranges][2] = r[2]
+      end
+    end
+  end
+  visible_ranges = merged_ranges
+  local width = max_width
 
   local ts = vim.treesitter
   local parser
@@ -490,126 +514,134 @@ render._init_visible = function(namespace, config, query, regex_list)
     end
   end
 
-  for id, node in query_obj:iter_captures(root, bufnr, topline, botline) do
-    local name = query_obj.captures[id]
-    local icon = type(config.render[name].icon) == "table" and config.render[name].icon[1] or
-        config.render[name].icon
-    local hl_group = config.render[name].hl_group or name
-    local start_row, start_col, end_row, end_col = node:range()
-    local line = vim.api.nvim_buf_get_lines(bufnr, start_row, start_row + 1, false)[1]
-    local line_length = #line
-    local icon_padding = config.render[name].icon_padding
+  for _, range in ipairs(visible_ranges) do
+    local range_start = range[1]
+    local range_end = range[2]
+    for id, node in query_obj:iter_captures(root, bufnr, range_start, range_end) do
+      local name = query_obj.captures[id]
+      local icon = type(config.render[name].icon) == "table" and config.render[name].icon[1] or
+          config.render[name].icon
+      local hl_group = config.render[name].hl_group or name
+      local start_row, start_col, end_row, end_col = node:range()
+      local line = vim.api.nvim_buf_get_lines(bufnr, start_row, start_row + 1, false)[1]
+      local line_length = #line
+      local icon_padding = config.render[name].icon_padding
 
-    if name ~= "code_block" and is_in_codeblock(bufnr, start_row) then
-      goto continue_query
-    end
+      -- 多窗口可视区域合并后渲染；保持原有代码块跳过逻辑
+      if name ~= "code_block" and is_in_codeblock(bufnr, start_row) then
+        goto continue_query
+      end
 
-    if type(config.render[name].render) == "function" then
-      config.render[name].render({
-        bufnr = bufnr,
-        namespace = namespace,
-        hl_group = hl_group,
-        line = line,
-        win_width = width,
-        icon = icon,
-        start_row = start_row,
-        start_col = start_col,
-        end_row = end_row,
-        end_col = end_col
-      })
-    elseif type(config.render[name].render) == 'string' and type(render[config.render[name].render]) ~= 'nil' then
-      render[config.render[name].render]({
-        bufnr = bufnr,
-        namespace = namespace,
-        hl_group = hl_group,
-        line = line,
-        win_width = width,
-        icon = icon,
-        start_row = start_row,
-        start_col = start_col,
-        end_row = end_row,
-        end_col = end_col
-      })
-    else
-      if config.render[name].whole_line then
-        vim.api.nvim_buf_set_extmark(bufnr, namespace, start_row, 0, {
-          virt_text = { { icon:rep(width), hl_group } },
-          virt_text_pos = "overlay",
-          hl_mode = "combine",
+      if type(config.render[name].render) == "function" then
+        config.render[name].render({
+          bufnr = bufnr,
+            namespace = namespace,
+            hl_group = hl_group,
+            line = line,
+            win_width = width,
+            icon = icon,
+            start_row = start_row,
+            start_col = start_col,
+            end_row = end_row,
+            end_col = end_col
+        })
+      elseif type(config.render[name].render) == 'string' and type(render[config.render[name].render]) ~= 'nil' then
+        render[config.render[name].render]({
+          bufnr = bufnr,
+          namespace = namespace,
+          hl_group = hl_group,
+          line = line,
+          win_width = width,
+          icon = icon,
+          start_row = start_row,
+          start_col = start_col,
+          end_row = end_row,
+          end_col = end_col
         })
       else
-        vim.api.nvim_buf_set_extmark(bufnr, namespace, start_row, start_col, {
-          end_line = end_row,
-          end_col = end_col,
-          conceal = icon,
-          hl_group = hl_group,
-          priority = 0,
-        })
-        local after_hl = config.render[name].after_highlight
-        if after_hl ~= nil and after_hl ~= false then
-          local line_content = vim.api.nvim_buf_get_lines(bufnr, start_row, start_row + 1, false)[1] or ""
-          local after_col = end_col
-          local hl_group_to_use = after_hl
-          if type(after_hl) == "table" then
-            local group_name = "MarkliveAfterHighlight_" .. name
-            vim.api.nvim_set_hl(0, group_name, after_hl)
-            hl_group_to_use = group_name
-          end
-          if after_col < #line_content then
-            vim.api.nvim_buf_set_extmark(bufnr, namespace, start_row, after_col, {
-              end_line = start_row,
-              end_col = #line_content,
-              hl_group = hl_group_to_use,
-              priority = 1,
-            })
-          end
-        end
-      end
-      local fill_content = ' '
-      if config.render[name].hl_fill then
-        vim.api.nvim_buf_set_extmark(bufnr, namespace, start_row, line_length, {
-          virt_text = { { fill_content:rep(width - line_length - 1), hl_group } },
-          virt_text_pos = "overlay",
-          hl_mode = "combine",
-        })
-      end
-    end
-    ::continue_query::
-  end
-
-  for name, regex in pairs(regex_list) do
-    local icon = config.render[name].icon or '';
-    local lines = vim.api.nvim_buf_get_lines(0, topline, botline, false)
-    local matches = utils.find_matches_with_groups(lines, regex)
-    local icon_padding = config.render[name].icon_padding
-    for _, match in ipairs(matches) do
-      local lnum = topline + match.lnum
-      if is_in_codeblock(bufnr, lnum) then
-        goto continue_regex
-      end
-      if #match.groups == 0 then
-        local hl_group = config.render[name].hl_group or name
-        vim.api.nvim_buf_set_extmark(bufnr, namespace, lnum, match.start_col, {
-          end_line = lnum,
-          end_col = match.end_col,
-          conceal = type(icon) == "table" and icon[1] or icon,
-          hl_group = hl_group,
-          priority = 0,
-        })
-      else
-        for i, group in ipairs(match.groups) do
-          local hl_group = config.render[name].hl_group or name
-          local conceal = type(icon) == "table" and icon[i] or icon
-          vim.api.nvim_buf_set_extmark(bufnr, namespace, lnum, group.start_col, {
-            end_line = lnum,
-            end_col = group.end_col + 1,
-            conceal = conceal,
+        if config.render[name].whole_line then
+          vim.api.nvim_buf_set_extmark(bufnr, namespace, start_row, 0, {
+            virt_text = { { icon:rep(width), hl_group } },
+            virt_text_pos = "overlay",
+            hl_mode = "combine",
+          })
+        else
+          vim.api.nvim_buf_set_extmark(bufnr, namespace, start_row, start_col, {
+            end_line = end_row,
+            end_col = end_col,
+            conceal = icon,
             hl_group = hl_group,
             priority = 0,
           })
+          local after_hl = config.render[name].after_highlight
+          if after_hl ~= nil and after_hl ~= false then
+            local line_content = vim.api.nvim_buf_get_lines(bufnr, start_row, start_row + 1, false)[1] or ""
+            local after_col = end_col
+            local hl_group_to_use = after_hl
+            if type(after_hl) == "table" then
+              local group_name = "MarkliveAfterHighlight_" .. name
+              vim.api.nvim_set_hl(0, group_name, after_hl)
+              hl_group_to_use = group_name
+            end
+            if after_col < #line_content then
+              vim.api.nvim_buf_set_extmark(bufnr, namespace, start_row, after_col, {
+                end_line = start_row,
+                end_col = #line_content,
+                hl_group = hl_group_to_use,
+                priority = 1,
+              })
+            end
+          end
+        end
+        local fill_content = ' '
+        if config.render[name].hl_fill then
+          vim.api.nvim_buf_set_extmark(bufnr, namespace, start_row, line_length, {
+            virt_text = { { fill_content:rep(math.max(0, width - line_length - 1)), hl_group } },
+            virt_text_pos = "overlay",
+            hl_mode = "combine",
+          })
         end
       end
-      ::continue_regex::
+      ::continue_query::
+    end
+  end
+
+  for name, regex in pairs(regex_list) do
+    local icon = config.render[name].icon or ''
+    for _, range in ipairs(visible_ranges) do
+      local r_start = range[1]
+      local r_end = range[2]
+      local lines = vim.api.nvim_buf_get_lines(0, r_start, r_end, false)
+      local matches = utils.find_matches_with_groups(lines, regex)
+      for _, match in ipairs(matches) do
+        local lnum = r_start + match.lnum
+        if is_in_codeblock(bufnr, lnum) then
+          goto continue_regex
+        end
+        if #match.groups == 0 then
+          local hl_group = config.render[name].hl_group or name
+          vim.api.nvim_buf_set_extmark(bufnr, namespace, lnum, match.start_col, {
+            end_line = lnum,
+            end_col = match.end_col,
+            conceal = type(icon) == "table" and icon[1] or icon,
+            hl_group = hl_group,
+            priority = 0,
+          })
+        else
+          for i, group in ipairs(match.groups) do
+            local hl_group = config.render[name].hl_group or name
+            local conceal = type(icon) == "table" and icon[i] or icon
+            vim.api.nvim_buf_set_extmark(bufnr, namespace, lnum, group.start_col, {
+              end_line = lnum,
+              end_col = group.end_col + 1,
+              conceal = conceal,
+              hl_group = hl_group,
+              priority = 0,
+            })
+          end
+        end
+        ::continue_regex::
+      end
     end
   end
 end
