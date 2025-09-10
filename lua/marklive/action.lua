@@ -757,6 +757,35 @@ local function setup_list_autocmd()
                 return string.rep(" ", #s - 4)
               end
             end)
+            -- 如果是无序或任务空行，减少缩进后同步上一层级已有的无序列表 marker（保证层级前缀统一）
+            if (is_empty_unordered or is_empty_task) then
+              local new_indent = #(new_line:match("^(%s*)") or "")
+              local buflines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+              local replacement_marker = nil
+              -- 向上寻找同缩进级别的上一条无序/任务列表，沿用其 marker
+              for i = row - 2, 0, -1 do
+                local l = buflines[i + 1]
+                if l then
+                  local l_indent = #(l:match("^(%s*)") or "")
+                  if l_indent == new_indent then
+                    local m = l:match("^%s*([-*+])%s+")
+                    if m then
+                      replacement_marker = m
+                      break
+                    end
+                  elseif l_indent < new_indent then
+                    -- 再往上已越过父级
+                    break
+                  end
+                end
+              end
+              if replacement_marker then
+                local current_marker = new_line:match("^%s*([-*+])%s+")
+                if current_marker and current_marker ~= replacement_marker then
+                  new_line = new_line:gsub("^(%s*)[-*+]", "%1" .. replacement_marker, 1)
+                end
+              end
+            end
             vim.api.nvim_set_current_line(new_line)
             -- 光标移动到新行行尾
             vim.api.nvim_win_set_cursor(0, { row, #new_line })
