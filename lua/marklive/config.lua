@@ -26,7 +26,7 @@ return {
       highlight = { fg = '#5c92fa', underline = true }
     },
     markdownCode = {
-      matchadd = "\\v`[^`\\n]+`",
+      -- matchadd 已移除：改为与其它强调语法一致，代码块内部不再单独高亮行内代码
       highlight = { fg = "#00c4b0", bg = "#1f262f" }
     },
     markdownBlockquote = {
