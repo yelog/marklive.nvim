@@ -466,7 +466,8 @@ local function auto_new_list_line_above()
     local indent = line:match("^(%s*)")
     local new_line
     if task then
-      new_line = indent .. marker .. " " .. task .. " "
+      -- task 变量本身已经包含了 "- " 前缀，再拼接会产生 "- - [ ] "，这里改为重新构造标准任务前缀
+      new_line = indent .. marker .. " [ ] "
     else
       new_line = indent .. marker .. " "
     end
