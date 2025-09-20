@@ -80,6 +80,15 @@ M.enable = function()
         autocmd!
         autocmd FileChangedShellPost,Syntax,TextChanged,InsertLeave,TextChangedI * lua require('marklive').render()
         autocmd CursorMoved,CursorMovedI * lua require('marklive').render()
+        " 当折叠被打开或关闭时，可视区域发生变化但光标可能未移动，需要重新渲染
+        " WinScrolled: 部分情况下展开折叠会引起窗口滚动（顶部/底部补行）
+        autocmd WinScrolled * lua require('marklive').render()
+        " 仅在存在 FoldChanged 事件 (NVIM 0.10+) 时注册
+        if exists('##FoldChanged')
+          autocmd FoldChanged * lua require('marklive').render()
+        endif
+        " 兜底：在没有 FoldChanged 且不滚动/不移动光标的折叠场景，用 CursorHold 触发（受 updatetime 影响）
+        autocmd CursorHold,CursorHoldI * lua require('marklive').render()
         augroup END
     ]]
 end
