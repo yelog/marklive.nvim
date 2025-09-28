@@ -50,6 +50,23 @@ local function get_indent(line)
   return #(line:match("^(%s*)") or "")
 end
 
+-- Find the column where list content begins (0-based when used with #)
+local function get_list_content_col(line)
+  local task_prefix = line:match("^(%s*[-*+]%s+%[[ xX%-]%]%s*)")
+  if task_prefix then
+    return #task_prefix
+  end
+  local plain_prefix = line:match("^(%s*[-*+]%s+)")
+  if plain_prefix then
+    return #plain_prefix
+  end
+  local ordered_prefix = line:match("^(%s*[%d]+%.%s+)")
+  if ordered_prefix then
+    return #ordered_prefix
+  end
+  return #line
+end
+
 -- Check if a line is a task line
 local function is_task_line(line)
   return is_task_unchecked(line) or is_task_halfchecked(line) or is_task_checked(line)
@@ -380,7 +397,9 @@ local function fix_ordered_list(lines)
 end
 
 -- 自动补全下一行列表
-local function auto_new_list_line()
+local function auto_new_list_line(opts)
+  opts = opts or {}
+  local suffix = opts.suffix or ""
   local config = get_config()
   local list_cfg = config.action and config.action.list
   if not (list_cfg and list_cfg.enable) then return end
@@ -406,12 +425,11 @@ local function auto_new_list_line()
     if not new_line:match("^%s*[-*+]%s") then
       new_line = new_line:gsub("^%s*([-*+])", "%1 ")
     end
-    vim.api.nvim_buf_set_lines(0, row, row, false, { new_line })
-    -- 将光标定位到 -/marker+空格 后
-    local marker_start, marker_end = new_line:find("^%s*[-*+]%s")
-    local cursor_col = marker_end and (marker_end + 1) or (#new_line + 1)
-    vim.api.nvim_win_set_cursor(0, { row + 1, cursor_col })
-    vim.cmd("startinsert!")
+    local final_line = suffix ~= "" and (new_line .. suffix) or new_line
+    vim.api.nvim_buf_set_lines(0, row, row, false, { final_line })
+    local target_col = suffix ~= "" and get_list_content_col(final_line) or #final_line
+    vim.api.nvim_win_set_cursor(0, { row + 1, target_col })
+    vim.cmd(suffix ~= "" and "startinsert" or "startinsert!")
     return true
   end
 
@@ -422,6 +440,9 @@ local function auto_new_list_line()
     local indent = line:match("^(%s*)")
     local temp_marker = marker -- 先用当前 marker
     local new_line = indent .. temp_marker .. " "
+    if suffix ~= "" then
+      new_line = new_line .. suffix
+    end
     vim.api.nvim_buf_set_lines(0, row, row, false, { new_line })
 
     -- 插入后修正同层级所有有序列表序号
@@ -437,10 +458,9 @@ local function auto_new_list_line()
 
     -- 重新获取新插入行内容
     local fixed_line = vim.api.nvim_buf_get_lines(0, row, row + 1, false)[1]
-    local marker_start, marker_end = fixed_line:find("^%s*[%w%.]+%s")
-    local cursor_col = marker_end and (marker_end + 1) or (#fixed_line + 1)
-    vim.api.nvim_win_set_cursor(0, { row + 1, cursor_col })
-    vim.cmd("startinsert!")
+    local target_col = suffix ~= "" and get_list_content_col(fixed_line) or #fixed_line
+    vim.api.nvim_win_set_cursor(0, { row + 1, target_col })
+    vim.cmd(suffix ~= "" and "startinsert" or "startinsert!")
     return true
   end
   return false
@@ -812,8 +832,18 @@ local function setup_list_autocmd()
         local is_order = is_ordered_list(cur_line)
         local is_task = is_task_line(cur_line)
         if is_unorder or is_order or is_task then
+          local suffix = ""
+          local line_len = #cur_line
+          if col < line_len then
+            local content_start = get_list_content_col(cur_line)
+            if col >= content_start then
+              local left = cur_line:sub(1, col)
+              suffix = cur_line:sub(col + 1)
+              vim.api.nvim_set_current_line(left)
+            end
+          end
           -- 只自动补全，不再发送原始<CR>，避免多出一行
-          auto_new_list_line()
+          auto_new_list_line({ suffix = suffix })
         else
           -- 普通回车
           vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<CR>", true, false, true), "n", false)
