@@ -17,17 +17,6 @@ end
 
 -- Check if a line is a half-checked task (- [-] or * [-])
 local function is_task_halfchecked(line)
-      local repeatable_indent = function(direction)
-        return function()
-          list_indent(direction)
-          -- 注册 repeat
-          vim.fn["repeat#set"](":lua require'marklive.action'.repeat_list_indent('"..direction.."')")
-        end
-      end
-
-      M.repeat_list_indent = function(direction)
-        list_indent(direction)
-      end
   return line:match("^%s*[-*+]%s+%[%-%]") ~= nil
 end
 
@@ -651,6 +640,9 @@ local function list_indent(direction)
   end
 end
 
+-- 暴露内部函数，便于需要时外部或命令调用
+M._list_indent = list_indent
+
 -- 自动命令和映射
 local function setup_list_autocmd()
   -- InsertEnter时记录插入模式起始行
@@ -867,8 +859,19 @@ local function setup_list_autocmd()
       vim.keymap.set("v", ">", repeatable_indent("indent"), { buffer = true, noremap = true, silent = true })
       vim.keymap.set("v", "<", repeatable_indent("outdent"), { buffer = true, noremap = true, silent = true })
       -- normal 模式下 >>/<< 也用自定义逻辑
-      vim.keymap.set("n", ">>", repeatable_indent("indent"), { buffer = true, noremap = true, silent = true })
-      vim.keymap.set("n", "<<", repeatable_indent("outdent"), { buffer = true, noremap = true, silent = true })
+      -- 加 nowait 解决在插入模式使用 <C-o> 后输入 >> / << 被当成文字插入的问题
+      -- 去掉 nowait，确保 <C-o>> / <C-o><< 在插入模式下能够被识别为完整的多键映射（否则第一个 '>' 立即生效，无法组成 ">>"）
+      vim.keymap.set("n", ">>", repeatable_indent("indent"), { buffer = true, noremap = true, silent = true, desc = "Marklive list indent" })
+      vim.keymap.set("n", "<<", repeatable_indent("outdent"), { buffer = true, noremap = true, silent = true, desc = "Marklive list outdent" })
+
+      -- 为插入模式下的 <C-o>> / <C-o><< 提供可靠映射，避免多键普通模式映射在 <C-o> 场景下失效
+      pcall(vim.api.nvim_create_user_command, "MarkliveListIndent", function() list_indent("indent") end, {})
+      pcall(vim.api.nvim_create_user_command, "MarkliveListOutdent", function() list_indent("outdent") end, {})
+      -- 支持按 <C-o>>>（对称于 <C-o><<），避免多出一个 '>' 被插入
+      vim.keymap.set("i", "<C-o>>>", "<C-o>:MarkliveListIndent<CR>", { buffer = true, noremap = true, silent = true, desc = "Marklive list indent (insert <C-o>>>)" })
+      -- 兼容只按一次 > 的情况
+      vim.keymap.set("i", "<C-o>>", "<C-o>:MarkliveListIndent<CR>", { buffer = true, noremap = true, silent = true, desc = "Marklive list indent (insert <C-o>>)" })
+      vim.keymap.set("i", "<C-o><<", "<C-o>:MarkliveListOutdent<CR>", { buffer = true, noremap = true, silent = true, desc = "Marklive list outdent (insert <C-o>)" })
     end
   })
 end
