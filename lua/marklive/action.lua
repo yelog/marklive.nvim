@@ -528,7 +528,8 @@ end
 local function list_indent(direction)
   local config = get_config()
   local list_cfg = config.action and config.action.list
-  if not (list_cfg and list_cfg.enable) then return end
+  local processed = false
+  if not (list_cfg and list_cfg.enable) then return false end
 
   -- 只允许在 config.filetype 指定的文件类型中生效
   local filetype = vim.bo.filetype
@@ -544,7 +545,7 @@ local function list_indent(direction)
     end
   end
   if not matched then
-    return
+    return false
   end
 
   local mode = vim.fn.mode()
@@ -590,12 +591,14 @@ local function list_indent(direction)
         cur_idx = (cur_idx) % #unorder + 1
         local content = line:gsub("^%s*[-*+]%s*", "")
         lines[i] = string.rep(" ", indent + 4) .. unorder[cur_idx] .. " " .. content
+        processed = true
         if i == 1 then indent_delta = 4 end
       else
         -- 反缩进时切换为上一个无序列表类型
         cur_idx = (cur_idx - 2 + #unorder) % #unorder + 1
         local content = line:gsub("^%s*[-*+]%s*", "")
         lines[i] = (indent >= 4 and string.rep(" ", indent - 4) or "") .. unorder[cur_idx] .. " " .. content
+        processed = true
         if i == 1 then indent_delta = (indent >= 4) and -4 or 0 end
       end
     else
@@ -604,9 +607,11 @@ local function list_indent(direction)
       if ok then
         if direction == "indent" then
           lines[i] = string.rep(" ", indent + 4) .. "1." .. line:gsub("^%s*[%d]+%.", "")
+          processed = true
           if i == 1 then indent_delta = 4 end
         else
           lines[i] = (indent >= 4 and string.rep(" ", indent - 4) or "") .. "1." .. line:gsub("^%s*[%d]+%.", "")
+          processed = true
           if i == 1 then indent_delta = (indent >= 4) and -4 or 0 end
         end
       end
@@ -638,6 +643,7 @@ local function list_indent(direction)
     local new_col = math.max(0, orig_col + indent_delta)
     vim.api.nvim_win_set_cursor(0, { orig_cursor[1], new_col })
   end
+  return processed
 end
 
 -- 暴露内部函数，便于需要时外部或命令调用
@@ -843,16 +849,87 @@ local function setup_list_autocmd()
       end, { buffer = true, noremap = true, silent = true })
       -- visual 模式下 >/< 一下即可缩进/反缩进
       -- 支持 . 重复，使用 :normal! 执行命令并注册 repeat
+      -- 非列表行（包括 # 标题等）在使用 >> / << 或 visual 模式下 > / < 时
+      -- 之前 fallback 到 normal! >> / << 某些 markdown 配置下无效
+      -- 改为手动计算并添加/删除 shiftwidth 空格，保证标题行也能缩进/反缩进
+      local function fallback_shift(direction)
+        local mode = vim.fn.mode()
+        local shift = vim.bo.shiftwidth
+        if shift == 0 then shift = vim.o.shiftwidth end
+        if shift == 0 then shift = vim.o.tabstop end
+        if shift == 0 then shift = 2 end  -- 保险兜底
+
+        local start_row, end_row
+        if mode == "v" or mode == "V" or mode == "\22" then
+          if vim.fn.line("v") < vim.fn.line(".") then
+            start_row = vim.fn.line("v") - 1
+            end_row = vim.fn.line(".") - 1
+          else
+            start_row = vim.fn.line(".") - 1
+            end_row = vim.fn.line("v") - 1
+          end
+        else
+          start_row = vim.api.nvim_win_get_cursor(0)[1] - 1
+          end_row = start_row
+        end
+
+        local lines = vim.api.nvim_buf_get_lines(0, start_row, end_row + 1, false)
+        local indent_delta = 0
+        for i, l in ipairs(lines) do
+          if direction == "indent" then
+            lines[i] = string.rep(" ", shift) .. l
+            if i == 1 then indent_delta = shift end
+          else
+            -- 反缩进：最多移除 shift 个前导空格
+            local cur_indent = #(l:match("^(%s*)") or "")
+            local remove = math.min(cur_indent, shift)
+            if remove > 0 then
+              lines[i] = l:sub(remove + 1)
+              if i == 1 then indent_delta = -remove end
+            end
+          end
+        end
+        vim.api.nvim_buf_set_lines(0, start_row, end_row + 1, false, lines)
+
+        -- 单行模式下调整光标
+        if indent_delta ~= 0 and not (mode == "v" or mode == "V" or mode == "\22") then
+          local cursor = vim.api.nvim_win_get_cursor(0)
+          local new_col = math.max(0, cursor[2] + indent_delta)
+            vim.api.nvim_win_set_cursor(0, { cursor[1], new_col })
+        end
+      end
+
       local repeatable_indent = function(direction)
         return function()
-          list_indent(direction)
-          -- 在原来的基础上添加 \r（回车符）
+          local ok = list_indent(direction)
+          if not ok then
+            fallback_shift(direction)
+            return
+          end
+          -- 仅在自定义列表缩进行为时设置 repeat
           vim.fn["repeat#set"](":lua require'marklive.action'.repeat_list_indent('" .. direction .. "')\r")
         end
       end
 
       M.repeat_list_indent = function(direction)
-        list_indent(direction)
+        local ok = list_indent(direction)
+        if not ok then
+          local m = vim.fn.mode()
+            if m == "v" or m == "V" or m == "\22" then
+              if direction == "indent" then
+                vim.cmd("normal! >")
+              else
+                vim.cmd("normal! <")
+              end
+            else
+              if direction == "indent" then
+                vim.cmd("normal! >>")
+              else
+                vim.cmd("normal! <<")
+              end
+            end
+          return
+        end
         vim.fn["repeat#set"](":lua require'marklive.action'.repeat_list_indent('" .. direction .. "')\r")
       end
 
