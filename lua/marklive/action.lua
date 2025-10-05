@@ -459,23 +459,19 @@ end
 local function auto_new_list_line_above()
   local config = get_config()
   local list_cfg = config.action and config.action.list
-  if not (list_cfg and list_cfg.enable) then return end
+  if not (list_cfg and list_cfg.enable) then return false end
 
-  local row, col = unpack(vim.api.nvim_win_get_cursor(0))
-  if row == 1 then return end
-  local lines = vim.api.nvim_buf_get_lines(0, row - 2, row - 1, false)
-  if #lines == 0 then return end
-  local line = lines[1]
+  local row = vim.api.nvim_win_get_cursor(0)[1]
+  local cur_line = vim.api.nvim_get_current_line()
+  if not cur_line or cur_line == "" then return false end
   local unorder = list_cfg.unorder or { '-', '*', '+' }
 
   -- 无序列表/任务
-  local is_unorder, marker = is_unordered_list(line, unorder)
+  local is_unorder, marker = is_unordered_list(cur_line, unorder)
   if is_unorder then
-    local task = line:match("^%s*[-*+]%s+%[.?.?%]")
-    local indent = line:match("^(%s*)")
+    local indent = cur_line:match("^(%s*)") or ""
     local new_line
-    if task then
-      -- task 变量本身已经包含了 "- " 前缀，再拼接会产生 "- - [ ] "，这里改为重新构造标准任务前缀
+    if is_task_line(cur_line) then
       new_line = indent .. marker .. " [ ] "
     else
       new_line = indent .. marker .. " "
@@ -493,33 +489,61 @@ local function auto_new_list_line_above()
   end
 
   -- 有序列表（只支持数字）
-  local ok, marker = is_ordered_list(line)
+  local ok, marker = is_ordered_list(cur_line)
   if ok then
-    -- 先插入新行
-    local prev_num, typ = get_ordered_info(line)
-    if prev_num and typ then
-      local indent = line:match("^(%s*)")
-      local new_marker = next_ordered_number(prev_num, typ)
-      local new_line = indent .. new_marker .. " "
-      vim.api.nvim_buf_set_lines(0, row - 1, row - 1, false, { new_line })
-      -- 修正所有同级有序列表的序号（插入后再修正）
-      local all_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-      fix_ordered_list(all_lines)
-      -- 只更新有变化的行
-      local orig_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-      for i = 1, #all_lines do
-        if orig_lines[i] ~= all_lines[i] then
-          vim.api.nvim_buf_set_lines(0, i - 1, i, false, { all_lines[i] })
+    local indent = cur_line:match("^(%s*)") or ""
+    local indent_len = #indent
+    local cur_num, typ = get_ordered_info(cur_line)
+    local new_marker = marker
+    if cur_num and typ then
+      local buflines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+      local prev_same_indent_num = nil
+      for i = row - 2, 0, -1 do
+        local candidate = buflines[i + 1]
+        if candidate then
+          local candidate_indent = get_indent(candidate)
+          if candidate_indent == indent_len then
+            local candidate_ok = is_ordered_list(candidate)
+            if candidate_ok then
+              local prev_num = get_ordered_info(candidate)
+              if prev_num then
+                prev_same_indent_num = prev_num
+                break
+              end
+            end
+          elseif candidate_indent < indent_len then
+            break
+          end
         end
       end
-      -- 重新获取新插入行内容
-      local fixed_line = vim.api.nvim_buf_get_lines(0, row - 1, row, false)[1]
-      local marker_start, marker_end = fixed_line:find("^%s*[%w%.]+%s")
-      local cursor_col = marker_end and (marker_end + 1) or (#fixed_line + 1)
-      vim.api.nvim_win_set_cursor(0, { row, cursor_col })
-      vim.cmd("startinsert!")
-      return true
+      if prev_same_indent_num then
+        new_marker = next_ordered_number(prev_same_indent_num, typ)
+      else
+        new_marker = tostring(cur_num) .. "."
+      end
     end
+
+    local new_line = indent .. new_marker .. " "
+    vim.api.nvim_buf_set_lines(0, row - 1, row - 1, false, { new_line })
+
+    -- 修正所有同级有序列表的序号（插入后再修正）
+    local all_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+    fix_ordered_list(all_lines)
+    -- 只更新有变化的行
+    local orig_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+    for i = 1, #all_lines do
+      if orig_lines[i] ~= all_lines[i] then
+        vim.api.nvim_buf_set_lines(0, i - 1, i, false, { all_lines[i] })
+      end
+    end
+
+    -- 重新获取新插入行内容
+    local fixed_line = vim.api.nvim_buf_get_lines(0, row - 1, row, false)[1]
+    local marker_start, marker_end = fixed_line:find("^%s*[%w%.]+%s")
+    local cursor_col = marker_end and (marker_end + 1) or (#fixed_line + 1)
+    vim.api.nvim_win_set_cursor(0, { row, cursor_col })
+    vim.cmd("startinsert!")
+    return true
   end
   return false
 end
