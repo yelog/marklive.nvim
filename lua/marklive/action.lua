@@ -677,15 +677,20 @@ M._list_indent = list_indent
 local function setup_list_autocmd()
   -- InsertEnter时记录插入模式起始行
   local insert_start_row = nil
+  local group = vim.api.nvim_create_augroup("MarkliveListAutocmd", { clear = true })
   vim.api.nvim_create_autocmd("InsertEnter", {
     pattern = "*",
-    callback = function()
+    group = group,
+    callback = function(event)
+      if vim.bo[event.buf].filetype ~= "markdown" then return end
       insert_start_row = vim.api.nvim_win_get_cursor(0)[1]
     end
   })
   vim.api.nvim_create_autocmd("TextChangedI", {
     pattern = "*",
-    callback = function()
+    group = group,
+    callback = function(event)
+      if vim.bo[event.buf].filetype ~= "markdown" then return end
       -- 仅当上一行为有序/无序/任务列表，且当前行为空时触发
       local row, col = unpack(vim.api.nvim_win_get_cursor(0))
       if row < 2 then return end
@@ -715,7 +720,10 @@ local function setup_list_autocmd()
   })
   vim.api.nvim_create_autocmd("BufEnter", {
     pattern = "*",
-    callback = function()
+    group = group,
+    callback = function(event)
+      local buf = event.buf
+      if vim.bo[buf].filetype ~= "markdown" then return end
       -- o
       vim.keymap.set("n", "o", function()
         local row = vim.api.nvim_win_get_cursor(0)[1]
@@ -745,7 +753,7 @@ local function setup_list_autocmd()
           -- 兼容普通回车，手动插入新行并进入插入模式
           vim.api.nvim_feedkeys("o", "n", false)
         end
-      end, { buffer = true, noremap = true, silent = true })
+      end, { buffer = buf, noremap = true, silent = true })
       -- O
       vim.keymap.set("n", "O", function()
         -- 只在当前行本身是列表/任务时才尝试智能补全上一行
@@ -764,7 +772,7 @@ local function setup_list_autocmd()
           -- 当前行不是列表（例如位于列表块下方的空行），保持原生 O 行为
           vim.api.nvim_feedkeys("O", "n", false)
         end
-      end, { buffer = true, noremap = true, silent = true })
+      end, { buffer = buf, noremap = true, silent = true })
       -- 回车（insert模式）自动补全列表
       vim.keymap.set("i", "<CR>", function()
         local row, col = unpack(vim.api.nvim_win_get_cursor(0))
@@ -870,7 +878,7 @@ local function setup_list_autocmd()
           -- 普通回车
           vim.api.nvim_feedkeys(vim.api.nvim_replace_termcodes("<CR>", true, false, true), "n", false)
         end
-      end, { buffer = true, noremap = true, silent = true })
+      end, { buffer = buf, noremap = true, silent = true })
       -- visual 模式下 >/< 一下即可缩进/反缩进
       -- 支持 . 重复，使用 :normal! 执行命令并注册 repeat
       -- 非列表行（包括 # 标题等）在使用 >> / << 或 visual 模式下 > / < 时
@@ -957,22 +965,22 @@ local function setup_list_autocmd()
         vim.fn["repeat#set"](":lua require'marklive.action'.repeat_list_indent('" .. direction .. "')\r")
       end
 
-      vim.keymap.set("v", ">", repeatable_indent("indent"), { buffer = true, noremap = true, silent = true })
-      vim.keymap.set("v", "<", repeatable_indent("outdent"), { buffer = true, noremap = true, silent = true })
+      vim.keymap.set("v", ">", repeatable_indent("indent"), { buffer = buf, noremap = true, silent = true })
+      vim.keymap.set("v", "<", repeatable_indent("outdent"), { buffer = buf, noremap = true, silent = true })
       -- normal 模式下 >>/<< 也用自定义逻辑
       -- 加 nowait 解决在插入模式使用 <C-o> 后输入 >> / << 被当成文字插入的问题
       -- 去掉 nowait，确保 <C-o>> / <C-o><< 在插入模式下能够被识别为完整的多键映射（否则第一个 '>' 立即生效，无法组成 ">>"）
-      vim.keymap.set("n", ">>", repeatable_indent("indent"), { buffer = true, noremap = true, silent = true, desc = "Marklive list indent" })
-      vim.keymap.set("n", "<<", repeatable_indent("outdent"), { buffer = true, noremap = true, silent = true, desc = "Marklive list outdent" })
+      vim.keymap.set("n", ">>", repeatable_indent("indent"), { buffer = buf, noremap = true, silent = true, desc = "Marklive list indent" })
+      vim.keymap.set("n", "<<", repeatable_indent("outdent"), { buffer = buf, noremap = true, silent = true, desc = "Marklive list outdent" })
 
       -- 为插入模式下的 <C-o>> / <C-o><< 提供可靠映射，避免多键普通模式映射在 <C-o> 场景下失效
       pcall(vim.api.nvim_create_user_command, "MarkliveListIndent", function() list_indent("indent") end, {})
       pcall(vim.api.nvim_create_user_command, "MarkliveListOutdent", function() list_indent("outdent") end, {})
       -- 支持按 <C-o>>>（对称于 <C-o><<），避免多出一个 '>' 被插入
-      vim.keymap.set("i", "<C-o>>>", "<C-o>:MarkliveListIndent<CR>", { buffer = true, noremap = true, silent = true, desc = "Marklive list indent (insert <C-o>>>)" })
+      vim.keymap.set("i", "<C-o>>>", "<C-o>:MarkliveListIndent<CR>", { buffer = buf, noremap = true, silent = true, desc = "Marklive list indent (insert <C-o>>>)" })
       -- 兼容只按一次 > 的情况
-      vim.keymap.set("i", "<C-o>>", "<C-o>:MarkliveListIndent<CR>", { buffer = true, noremap = true, silent = true, desc = "Marklive list indent (insert <C-o>>)" })
-      vim.keymap.set("i", "<C-o><<", "<C-o>:MarkliveListOutdent<CR>", { buffer = true, noremap = true, silent = true, desc = "Marklive list outdent (insert <C-o>)" })
+      vim.keymap.set("i", "<C-o>>", "<C-o>:MarkliveListIndent<CR>", { buffer = buf, noremap = true, silent = true, desc = "Marklive list indent (insert <C-o>>)" })
+      vim.keymap.set("i", "<C-o><<", "<C-o>:MarkliveListOutdent<CR>", { buffer = buf, noremap = true, silent = true, desc = "Marklive list outdent (insert <C-o>)" })
     end
   })
 end
