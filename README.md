@@ -116,6 +116,8 @@ keys = {
   { "<leader>tml", function() Marklive.table_move_col_right() end,    desc = "Swap column with right" },
   { "<leader>tmj", function() Marklive.table_move_row_down() end,     desc = "Swap row with below (table body)" },
   { "<leader>tmk", function() Marklive.table_move_row_up() end,       desc = "Swap row with above (table body)" },
+  { "<leader>tdr", function() Marklive.table_delete_row() end,        desc = "Delete current row (table body)" },
+  { "<leader>tdc", function() Marklive.table_delete_col() end,        desc = "Delete current column" },
   { "<A-h>",       function() Marklive.table_nav_left() end,          desc = "Jump left cell (wrap)",  mode = { "n", "i" } },
   { "<A-l>",       function() Marklive.table_nav_right() end,         desc = "Jump right cell (wrap)", mode = { "n", "i" } },
   { "<A-j>",       function() Marklive.table_nav_down() end,          desc = "Jump down cell (wrap)",  mode = { "n", "i" } },

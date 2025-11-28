@@ -799,6 +799,56 @@ function M.table_move_row_up()
   apply_table_rows(ctx)
 end
 
+function M.table_delete_row()
+  local ctx = get_table_context()
+  if not ctx or not ensure_body_row(ctx) then return end
+  local target_col_idx = ctx.cursor_col_idx or 1
+  local del_line = ctx.start_row + ctx.cursor_row_idx - 1
+  vim.api.nvim_buf_set_lines(0, del_line - 1, del_line, false, {})
+
+  -- 对齐剩余表格（若光标仍在表格内）
+  local line_count = vim.api.nvim_buf_line_count(0)
+  local new_line = math.min(del_line, line_count)
+  if new_line < 1 then new_line = 1 end
+  vim.api.nvim_win_set_cursor(0, { new_line, 0 })
+
+  local new_ctx = get_table_context()
+  if new_ctx then
+    local formatted = format_table_lines(rows_to_lines(new_ctx.rows, new_ctx.indent_prefix))
+    if formatted then
+      vim.api.nvim_buf_set_lines(0, new_ctx.start_row - 1, new_ctx.end_row, false, formatted)
+      local target_row_idx = math.min(ctx.cursor_row_idx, #new_ctx.rows)
+      local body_start = (new_ctx.separator_idx or 0) + 1
+      if target_row_idx < body_start then target_row_idx = body_start end
+      if target_row_idx > #new_ctx.rows then target_row_idx = #new_ctx.rows end
+      local target_line = vim.api.nvim_buf_get_lines(0, new_ctx.start_row + target_row_idx - 2, new_ctx.start_row + target_row_idx - 1, false)[1]
+      if target_line then
+        local col0 = get_cell_column_position(target_line, target_col_idx)
+        vim.api.nvim_win_set_cursor(0, { new_ctx.start_row + target_row_idx - 1, col0 })
+      end
+    end
+  end
+end
+
+function M.table_delete_col()
+  local ctx = get_table_context()
+  if not ctx then return end
+  if not ctx.cursor_col_idx then
+    vim.notify("Cannot locate current table column", vim.log.levels.WARN)
+    return
+  end
+  if ctx.column_count <= 1 then
+    vim.notify("Cannot delete the only column", vim.log.levels.WARN)
+    return
+  end
+  for _, row in ipairs(ctx.rows) do
+    table.remove(row, ctx.cursor_col_idx)
+  end
+  ctx.column_count = ctx.column_count - 1
+  ctx.end_row = ctx.start_row - 1 + #ctx.rows
+  apply_table_rows(ctx)
+end
+
 local function move_table_cell(direction)
   local ctx = get_table_context()
   if not ctx then return end

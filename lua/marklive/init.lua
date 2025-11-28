@@ -178,6 +178,14 @@ M.table_move_row_up = function()
   require("marklive.action").table_move_row_up()
 end
 
+M.table_delete_row = function()
+  require("marklive.action").table_delete_row()
+end
+
+M.table_delete_col = function()
+  require("marklive.action").table_delete_col()
+end
+
 M.table_nav_left = function()
   require("marklive.action").table_nav_left()
 end
