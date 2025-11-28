@@ -250,10 +250,17 @@ local function get_cell_column_position(line, col_idx)
   local next_pos = bars[col_idx + 1]
   if not start_pos or not next_pos then return 0 end
   local segment = line:sub(start_pos + 1, next_pos - 1)
-  local leading = segment:match("^%s*") or ""
-  local col1 = start_pos + #leading -- 1-based
-  if col1 > #line then col1 = #line end
-  return col1 - 1                   -- 0-based
+  local non_space_start = segment:find("%S")
+  local target_offset
+  if non_space_start then
+    target_offset = non_space_start
+  else
+    local space_start = segment:find(" ")
+    target_offset = space_start or 1
+  end
+  local col1 = start_pos + target_offset -- 1-based
+  if col1 > #line + 1 then col1 = #line + 1 end
+  return col1 - 1                        -- 0-based
 end
 
 local function rows_to_lines(rows, indent_prefix)
