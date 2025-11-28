@@ -34,6 +34,13 @@ local function detect_alignments(table_cells, col_count)
   return alignments
 end
 
+local function is_pipe_table_line(line)
+  if not line then return false end
+  if not line:match("^%s*|") then return false end
+  local pipe_count = select(2, line:gsub("|", ""))
+  return pipe_count >= 2
+end
+
 -- 判断某一行是否在代码块内
 local function is_in_codeblock(bufnr, lnum)
   -- bufnr: buffer number
@@ -1271,16 +1278,58 @@ end
 
 render.table = function(rc)
   local bufnr = rc.bufnr
+  local line_count = vim.api.nvim_buf_line_count(bufnr)
+  local start_row = rc.start_row
+  local end_row = rc.end_row
+
+  while start_row > 0 do
+    local prev_line = vim.api.nvim_buf_get_lines(bufnr, start_row - 1, start_row, false)[1]
+    if is_pipe_table_line(prev_line) then
+      start_row = start_row - 1
+    else
+      break
+    end
+  end
+  while end_row < line_count do
+    local next_line = vim.api.nvim_buf_get_lines(bufnr, end_row, end_row + 1, false)[1]
+    if is_pipe_table_line(next_line) then
+      end_row = end_row + 1
+    else
+      break
+    end
+  end
+  rc.start_row = start_row
+  rc.end_row = end_row
+
   if not table_ranges_by_buf[bufnr] then
     table_ranges_by_buf[bufnr] = {}
   end
-  table.insert(table_ranges_by_buf[bufnr], {
-    start_row = rc.start_row,
-    end_row = rc.end_row,
-    bufnr = rc.bufnr,
-    namespace = rc.namespace,
-    config = rc.config,
-  })
+  local merged = false
+  for idx, range in ipairs(table_ranges_by_buf[bufnr]) do
+    if not (end_row <= range.start_row or start_row >= range.end_row) then
+      range.start_row = start_row
+      range.end_row = end_row
+      rc.start_row = start_row
+      rc.end_row = end_row
+      merged = true
+      -- 清理旧渲染范围
+      vim.api.nvim_buf_clear_namespace(bufnr, rc.namespace, range.start_row, range.end_row)
+      break
+    end
+  end
+  if not merged then
+    table.insert(table_ranges_by_buf[bufnr], {
+      start_row = start_row,
+      end_row = end_row,
+      bufnr = rc.bufnr,
+      namespace = rc.namespace,
+      config = rc.config,
+    })
+    rc.start_row = start_row
+    rc.end_row = end_row
+    vim.api.nvim_buf_clear_namespace(bufnr, rc.namespace, rc.start_row, rc.end_row)
+  end
+
   _orig_table(rc)
 end
 
