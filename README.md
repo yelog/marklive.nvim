@@ -116,6 +116,10 @@ keys = {
   { "<leader>tml", function() Marklive.table_move_col_right() end,    desc = "Swap column with right" },
   { "<leader>tmj", function() Marklive.table_move_row_down() end,     desc = "Swap row with below (table body)" },
   { "<leader>tmk", function() Marklive.table_move_row_up() end,       desc = "Swap row with above (table body)" },
+  { "<A-h>",       function() Marklive.table_nav_left() end,          desc = "Jump left cell (wrap)",  mode = { "n", "i" } },
+  { "<A-l>",       function() Marklive.table_nav_right() end,         desc = "Jump right cell (wrap)", mode = { "n", "i" } },
+  { "<A-j>",       function() Marklive.table_nav_down() end,          desc = "Jump down cell (wrap)",  mode = { "n", "i" } },
+  { "<A-k>",       function() Marklive.table_nav_up() end,            desc = "Jump up cell (wrap)",    mode = { "n", "i" } },
 }
 ```
 > 需要其他自定义函数时，也可以将它们放在同一个全局表中统一管理，避免散落的全局函数。

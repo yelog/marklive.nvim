@@ -239,6 +239,23 @@ local function get_cursor_column_index(line, cursor_col0)
   return nil
 end
 
+local function get_cell_column_position(line, col_idx)
+  if not line then return 0 end
+  local bars = {}
+  for pos in line:gmatch("()|") do
+    table.insert(bars, pos)
+  end
+  if #bars < col_idx + 1 then return 0 end
+  local start_pos = bars[col_idx]
+  local next_pos = bars[col_idx + 1]
+  if not start_pos or not next_pos then return 0 end
+  local segment = line:sub(start_pos + 1, next_pos - 1)
+  local leading = segment:match("^%s*") or ""
+  local col1 = start_pos + #leading -- 1-based
+  if col1 > #line then col1 = #line end
+  return col1 - 1                   -- 0-based
+end
+
 local function rows_to_lines(rows, indent_prefix)
   local lines = {}
   local prefix = indent_prefix or ""
@@ -759,7 +776,7 @@ function M.table_move_row_down()
     return
   end
   ctx.rows[ctx.cursor_row_idx], ctx.rows[ctx.cursor_row_idx + 1] =
-    ctx.rows[ctx.cursor_row_idx + 1], ctx.rows[ctx.cursor_row_idx]
+      ctx.rows[ctx.cursor_row_idx + 1], ctx.rows[ctx.cursor_row_idx]
   apply_table_rows(ctx)
 end
 
@@ -771,9 +788,46 @@ function M.table_move_row_up()
     return
   end
   ctx.rows[ctx.cursor_row_idx], ctx.rows[ctx.cursor_row_idx - 1] =
-    ctx.rows[ctx.cursor_row_idx - 1], ctx.rows[ctx.cursor_row_idx]
+      ctx.rows[ctx.cursor_row_idx - 1], ctx.rows[ctx.cursor_row_idx]
   apply_table_rows(ctx)
 end
+
+local function move_table_cell(direction)
+  local ctx = get_table_context()
+  if not ctx then return end
+  local row_idx = ctx.cursor_row_idx or 1
+  local col_idx = ctx.cursor_col_idx or 1
+  local row_count = #ctx.rows
+  local col_count = ctx.column_count
+  if row_count == 0 or col_count == 0 then return end
+
+  if direction == "left" then
+    col_idx = col_idx - 1
+    if col_idx < 1 then col_idx = col_count end
+  elseif direction == "right" then
+    col_idx = col_idx + 1
+    if col_idx > col_count then col_idx = 1 end
+  elseif direction == "up" then
+    row_idx = row_idx - 1
+    if row_idx < 1 then row_idx = row_count end
+  elseif direction == "down" then
+    row_idx = row_idx + 1
+    if row_idx > row_count then row_idx = 1 end
+  end
+
+  local target_line = vim.api.nvim_buf_get_lines(0, ctx.start_row + row_idx - 2, ctx.start_row + row_idx - 1, false)[1]
+  if not target_line then return end
+  local target_col0 = get_cell_column_position(target_line, col_idx)
+  vim.api.nvim_win_set_cursor(0, { ctx.start_row + row_idx - 1, target_col0 })
+end
+
+function M.table_nav_left() move_table_cell("left") end
+
+function M.table_nav_right() move_table_cell("right") end
+
+function M.table_nav_up() move_table_cell("up") end
+
+function M.table_nav_down() move_table_cell("down") end
 
 -- ===========================
 -- 列表自动补全与缩进/反缩进逻辑
@@ -1396,7 +1450,7 @@ local function setup_list_autocmd()
         local shift = vim.bo.shiftwidth
         if shift == 0 then shift = vim.o.shiftwidth end
         if shift == 0 then shift = vim.o.tabstop end
-        if shift == 0 then shift = 2 end  -- 保险兜底
+        if shift == 0 then shift = 2 end -- 保险兜底
 
         local start_row, end_row
         if mode == "v" or mode == "V" or mode == "\22" then
@@ -1434,7 +1488,7 @@ local function setup_list_autocmd()
         if indent_delta ~= 0 and not (mode == "v" or mode == "V" or mode == "\22") then
           local cursor = vim.api.nvim_win_get_cursor(0)
           local new_col = math.max(0, cursor[2] + indent_delta)
-            vim.api.nvim_win_set_cursor(0, { cursor[1], new_col })
+          vim.api.nvim_win_set_cursor(0, { cursor[1], new_col })
         end
       end
 
@@ -1454,19 +1508,19 @@ local function setup_list_autocmd()
         local ok = list_indent(direction)
         if not ok then
           local m = vim.fn.mode()
-            if m == "v" or m == "V" or m == "\22" then
-              if direction == "indent" then
-                vim.cmd("normal! >")
-              else
-                vim.cmd("normal! <")
-              end
+          if m == "v" or m == "V" or m == "\22" then
+            if direction == "indent" then
+              vim.cmd("normal! >")
             else
-              if direction == "indent" then
-                vim.cmd("normal! >>")
-              else
-                vim.cmd("normal! <<")
-              end
+              vim.cmd("normal! <")
             end
+          else
+            if direction == "indent" then
+              vim.cmd("normal! >>")
+            else
+              vim.cmd("normal! <<")
+            end
+          end
           return
         end
         vim.fn["repeat#set"](":lua require'marklive.action'.repeat_list_indent('" .. direction .. "')\r")
@@ -1477,17 +1531,22 @@ local function setup_list_autocmd()
       -- normal 模式下 >>/<< 也用自定义逻辑
       -- 加 nowait 解决在插入模式使用 <C-o> 后输入 >> / << 被当成文字插入的问题
       -- 去掉 nowait，确保 <C-o>> / <C-o><< 在插入模式下能够被识别为完整的多键映射（否则第一个 '>' 立即生效，无法组成 ">>"）
-      vim.keymap.set("n", ">>", repeatable_indent("indent"), { buffer = buf, noremap = true, silent = true, desc = "Marklive list indent" })
-      vim.keymap.set("n", "<<", repeatable_indent("outdent"), { buffer = buf, noremap = true, silent = true, desc = "Marklive list outdent" })
+      vim.keymap.set("n", ">>", repeatable_indent("indent"),
+        { buffer = buf, noremap = true, silent = true, desc = "Marklive list indent" })
+      vim.keymap.set("n", "<<", repeatable_indent("outdent"),
+        { buffer = buf, noremap = true, silent = true, desc = "Marklive list outdent" })
 
       -- 为插入模式下的 <C-o>> / <C-o><< 提供可靠映射，避免多键普通模式映射在 <C-o> 场景下失效
       pcall(vim.api.nvim_create_user_command, "MarkliveListIndent", function() list_indent("indent") end, {})
       pcall(vim.api.nvim_create_user_command, "MarkliveListOutdent", function() list_indent("outdent") end, {})
       -- 支持按 <C-o>>>（对称于 <C-o><<），避免多出一个 '>' 被插入
-      vim.keymap.set("i", "<C-o>>>", "<C-o>:MarkliveListIndent<CR>", { buffer = buf, noremap = true, silent = true, desc = "Marklive list indent (insert <C-o>>>)" })
+      vim.keymap.set("i", "<C-o>>>", "<C-o>:MarkliveListIndent<CR>",
+        { buffer = buf, noremap = true, silent = true, desc = "Marklive list indent (insert <C-o>>>)" })
       -- 兼容只按一次 > 的情况
-      vim.keymap.set("i", "<C-o>>", "<C-o>:MarkliveListIndent<CR>", { buffer = buf, noremap = true, silent = true, desc = "Marklive list indent (insert <C-o>>)" })
-      vim.keymap.set("i", "<C-o><<", "<C-o>:MarkliveListOutdent<CR>", { buffer = buf, noremap = true, silent = true, desc = "Marklive list outdent (insert <C-o>)" })
+      vim.keymap.set("i", "<C-o>>", "<C-o>:MarkliveListIndent<CR>",
+        { buffer = buf, noremap = true, silent = true, desc = "Marklive list indent (insert <C-o>>)" })
+      vim.keymap.set("i", "<C-o><<", "<C-o>:MarkliveListOutdent<CR>",
+        { buffer = buf, noremap = true, silent = true, desc = "Marklive list outdent (insert <C-o>)" })
     end
   })
 end

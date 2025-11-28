@@ -178,4 +178,20 @@ M.table_move_row_up = function()
   require("marklive.action").table_move_row_up()
 end
 
+M.table_nav_left = function()
+  require("marklive.action").table_nav_left()
+end
+
+M.table_nav_right = function()
+  require("marklive.action").table_nav_right()
+end
+
+M.table_nav_up = function()
+  require("marklive.action").table_nav_up()
+end
+
+M.table_nav_down = function()
+  require("marklive.action").table_nav_down()
+end
+
 return M
