@@ -142,8 +142,8 @@ vim.api.nvim_create_user_command("MarkliveTaskToggle", function()
   require("marklive.action").toggle_task()
 end, { desc = "Toggle markdown task state" })
 
-M.table_format = function()
-  require("marklive.action").format_table()
+M.table_align = function()
+  require("marklive.action").table_align()
 end
 
 return M

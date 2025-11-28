@@ -89,7 +89,7 @@ If you don't want to use a Nerd Font, you can replace the icons with Unicode sym
 
 ## Table Format
 
-`marklive` 提供 `table_format()` 用于格式化光标所在的管道表格，按照分隔行推断对齐方式：
+`marklive` 提供 `table_align()` 用于格式化光标所在的管道表格，按照分隔行推断对齐方式：
 - 每列宽度取所有行去除左右空格后的最大显示宽度，内容与边框符号至少留 1 个空格。
 - 分隔行 `----`/`:---` 视为左对齐，`:---:` 居中，`---:` 右对齐；需要补齐时在冒号间添加 `-`，其他行用空格补齐。
 - 默认开启，可通过 `action.table.enable = false` 关闭。
@@ -107,7 +107,7 @@ require('marklive').setup({
 ```lua
 -- 例如在 Lazy.nvim opts 中
 keys = {
-  { "<leader>mtf", function() Marklive.table_format() end, desc = "Format markdown table" },
+  { "<leader>ta", function() Marklive.table_align() end, desc = "Align markdown table" },
 }
 ```
 > 需要其他自定义函数时，也可以将它们放在同一个全局表中统一管理，避免散落的全局函数。

@@ -439,7 +439,7 @@ function M.toggle_task()
   end
 end
 
-function M.format_table()
+function M.table_align()
   local config = get_config()
   if config.enable == false then return end
 
