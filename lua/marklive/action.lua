@@ -219,6 +219,159 @@ local function format_table_lines(lines)
   return formatted
 end
 
+local function get_cursor_column_index(line, cursor_col0)
+  local bars = {}
+  for pos in line:gmatch("()|") do
+    table.insert(bars, pos)
+  end
+  if #bars < 2 then return nil end
+  local col1 = cursor_col0 + 1
+  for i = 1, #bars - 1 do
+    local start_pos = bars[i]
+    local end_pos = bars[i + 1]
+    if col1 >= start_pos and col1 < end_pos then
+      return i
+    end
+  end
+  if col1 == bars[#bars] then
+    return #bars - 1
+  end
+  return nil
+end
+
+local function rows_to_lines(rows, indent_prefix)
+  local lines = {}
+  local prefix = indent_prefix or ""
+  for i, row in ipairs(rows) do
+    local line = prefix .. "|" .. table.concat(row, "|") .. "|"
+    lines[i] = line
+  end
+  return lines
+end
+
+local function normalize_rows(rows, column_count)
+  for _, row in ipairs(rows) do
+    for i = #row + 1, column_count do
+      row[i] = ""
+    end
+  end
+end
+
+local function get_table_context(opts)
+  opts = opts or {}
+  local config = get_config()
+  if config.enable == false then
+    vim.notify("Table action is disabled", vim.log.levels.INFO)
+    return nil
+  end
+  local table_cfg = config.action and config.action.table
+  if not (table_cfg and table_cfg.enable) then
+    vim.notify("Table action is disabled by config", vim.log.levels.INFO)
+    return nil
+  end
+  if not is_supported_filetype(config.filetype, vim.bo.filetype) then
+    vim.notify("Table action works only for configured filetypes", vim.log.levels.WARN)
+    return nil
+  end
+
+  local cursor = vim.api.nvim_win_get_cursor(0)
+  local row = cursor[1]
+  local col = cursor[2]
+  local line = vim.api.nvim_buf_get_lines(0, row - 1, row, false)[1]
+  if not is_table_line(line) then
+    vim.notify("Current line is not a markdown table row", vim.log.levels.WARN)
+    return nil
+  end
+
+  local total = vim.api.nvim_buf_line_count(0)
+  local start_row = row
+  while start_row > 1 do
+    local prev_line = vim.api.nvim_buf_get_lines(0, start_row - 2, start_row - 1, false)[1]
+    if prev_line and is_table_line(prev_line) then
+      start_row = start_row - 1
+    else
+      break
+    end
+  end
+  local end_row = row
+  while end_row < total do
+    local next_line = vim.api.nvim_buf_get_lines(0, end_row, end_row + 1, false)[1]
+    if next_line and is_table_line(next_line) then
+      end_row = end_row + 1
+    else
+      break
+    end
+  end
+
+  local lines = vim.api.nvim_buf_get_lines(0, start_row - 1, end_row, false)
+  local min_indent = nil
+  local rows = {}
+  local column_count = 0
+  for i, l in ipairs(lines) do
+    local indent = get_indent(l)
+    if not min_indent or indent < min_indent then
+      min_indent = indent
+    end
+    local cells = split_table_row(l)
+    rows[i] = cells
+    if #cells > column_count then
+      column_count = #cells
+    end
+  end
+  normalize_rows(rows, column_count)
+
+  local separator_idx = nil
+  for i, cells in ipairs(rows) do
+    if is_separator_row(cells) then
+      separator_idx = i
+      break
+    end
+  end
+  if not separator_idx then
+    vim.notify("No table separator row found", vim.log.levels.WARN)
+    return nil
+  end
+
+  local cursor_row_idx = row - start_row + 1
+  local cursor_col_idx = get_cursor_column_index(lines[cursor_row_idx] or "", col)
+
+  return {
+    rows = rows,
+    lines = lines,
+    start_row = start_row,
+    end_row = end_row,
+    column_count = column_count,
+    separator_idx = separator_idx,
+    cursor_row_idx = cursor_row_idx,
+    cursor_col_idx = cursor_col_idx,
+    indent_prefix = string.rep(" ", min_indent or 0),
+  }
+end
+
+local function apply_table_rows(ctx)
+  local formatted, err = format_table_lines(rows_to_lines(ctx.rows, ctx.indent_prefix))
+  if not formatted then
+    vim.notify(err or "Unable to format table", vim.log.levels.WARN)
+    return false
+  end
+  vim.api.nvim_buf_set_lines(0, ctx.start_row - 1, ctx.end_row, false, formatted)
+  return true
+end
+
+local function ensure_body_row(ctx)
+  if not ctx.separator_idx or ctx.cursor_row_idx <= ctx.separator_idx then
+    vim.notify("Cursor must be on table body row", vim.log.levels.WARN)
+    return false
+  end
+  return true
+end
+
+local function get_separator_template_cell(ctx, col_idx)
+  local sep_row = ctx.separator_idx and ctx.rows[ctx.separator_idx]
+  if not sep_row then return "---" end
+  return sep_row[col_idx] or sep_row[#sep_row] or "---"
+end
+
 -- Check if a line is a task line
 local function is_task_line(line)
   return is_task_unchecked(line) or is_task_halfchecked(line) or is_task_checked(line)
@@ -488,6 +641,138 @@ function M.table_align()
     return
   end
   vim.api.nvim_buf_set_lines(0, start_row - 1, end_row, false, formatted)
+end
+
+function M.table_insert_row_below()
+  local ctx = get_table_context()
+  if not ctx or not ensure_body_row(ctx) then return end
+  local new_row = {}
+  for i = 1, ctx.column_count do
+    new_row[i] = ""
+  end
+  table.insert(ctx.rows, ctx.cursor_row_idx + 1, new_row)
+  ctx.end_row = ctx.start_row - 1 + #ctx.rows
+  apply_table_rows(ctx)
+end
+
+function M.table_insert_row_above()
+  local ctx = get_table_context()
+  if not ctx or not ensure_body_row(ctx) then return end
+  local new_row = {}
+  for i = 1, ctx.column_count do
+    new_row[i] = ""
+  end
+  table.insert(ctx.rows, ctx.cursor_row_idx, new_row)
+  ctx.end_row = ctx.start_row - 1 + #ctx.rows
+  apply_table_rows(ctx)
+end
+
+function M.table_insert_col_right()
+  local ctx = get_table_context()
+  if not ctx or not ensure_body_row(ctx) then return end
+  if not ctx.cursor_col_idx then
+    vim.notify("Cannot locate current table column", vim.log.levels.WARN)
+    return
+  end
+  ctx.column_count = ctx.column_count + 1
+  normalize_rows(ctx.rows, ctx.column_count - 1)
+  local insert_pos = ctx.cursor_col_idx + 1
+  local template = get_separator_template_cell(ctx, ctx.cursor_col_idx)
+  for idx, row in ipairs(ctx.rows) do
+    local val = ""
+    if idx == ctx.separator_idx then
+      val = template
+    end
+    table.insert(row, insert_pos, val)
+  end
+  ctx.end_row = ctx.start_row - 1 + #ctx.rows
+  apply_table_rows(ctx)
+end
+
+function M.table_insert_col_left()
+  local ctx = get_table_context()
+  if not ctx or not ensure_body_row(ctx) then return end
+  if not ctx.cursor_col_idx then
+    vim.notify("Cannot locate current table column", vim.log.levels.WARN)
+    return
+  end
+  ctx.column_count = ctx.column_count + 1
+  normalize_rows(ctx.rows, ctx.column_count - 1)
+  local insert_pos = ctx.cursor_col_idx
+  local template = get_separator_template_cell(ctx, ctx.cursor_col_idx)
+  for idx, row in ipairs(ctx.rows) do
+    local val = ""
+    if idx == ctx.separator_idx then
+      val = template
+    end
+    table.insert(row, insert_pos, val)
+  end
+  ctx.end_row = ctx.start_row - 1 + #ctx.rows
+  apply_table_rows(ctx)
+end
+
+function M.table_move_col_left()
+  local ctx = get_table_context()
+  if not ctx then return end
+  if not ctx.cursor_col_idx or ctx.cursor_col_idx <= 1 then
+    vim.notify("No column on the left to swap", vim.log.levels.WARN)
+    return
+  end
+  normalize_rows(ctx.rows, ctx.column_count)
+  local from = ctx.cursor_col_idx
+  local to = ctx.cursor_col_idx - 1
+  for _, row in ipairs(ctx.rows) do
+    row[from], row[to] = row[to], row[from]
+  end
+  apply_table_rows(ctx)
+end
+
+function M.table_move_col_right()
+  local ctx = get_table_context()
+  if not ctx then return end
+  if not ctx.cursor_col_idx then
+    vim.notify("Cannot locate current table column", vim.log.levels.WARN)
+    return
+  end
+  normalize_rows(ctx.rows, ctx.column_count)
+  if ctx.cursor_col_idx >= ctx.column_count then
+    vim.notify("No column on the right to swap", vim.log.levels.WARN)
+    return
+  end
+  local from = ctx.cursor_col_idx
+  local to = ctx.cursor_col_idx + 1
+  for _, row in ipairs(ctx.rows) do
+    row[from], row[to] = row[to], row[from]
+  end
+  apply_table_rows(ctx)
+end
+
+function M.table_move_row_down()
+  local ctx = get_table_context()
+  if not ctx or not ensure_body_row(ctx) then return end
+  if ctx.cursor_row_idx >= #ctx.rows then
+    vim.notify("No row below to swap", vim.log.levels.WARN)
+    return
+  end
+  if ctx.cursor_row_idx + 1 <= ctx.separator_idx then
+    vim.notify("Cannot move separator row", vim.log.levels.WARN)
+    return
+  end
+  ctx.rows[ctx.cursor_row_idx], ctx.rows[ctx.cursor_row_idx + 1] =
+    ctx.rows[ctx.cursor_row_idx + 1], ctx.rows[ctx.cursor_row_idx]
+  apply_table_rows(ctx)
+end
+
+function M.table_move_row_up()
+  local ctx = get_table_context()
+  if not ctx or not ensure_body_row(ctx) then return end
+  if ctx.cursor_row_idx <= ctx.separator_idx + 1 then
+    vim.notify("No body row above to swap", vim.log.levels.WARN)
+    return
+  end
+  ctx.rows[ctx.cursor_row_idx], ctx.rows[ctx.cursor_row_idx - 1] =
+    ctx.rows[ctx.cursor_row_idx - 1], ctx.rows[ctx.cursor_row_idx]
+  apply_table_rows(ctx)
 end
 
 -- ===========================

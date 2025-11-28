@@ -146,4 +146,36 @@ M.table_align = function()
   require("marklive.action").table_align()
 end
 
+M.table_insert_row_below = function()
+  require("marklive.action").table_insert_row_below()
+end
+
+M.table_insert_row_above = function()
+  require("marklive.action").table_insert_row_above()
+end
+
+M.table_insert_col_right = function()
+  require("marklive.action").table_insert_col_right()
+end
+
+M.table_insert_col_left = function()
+  require("marklive.action").table_insert_col_left()
+end
+
+M.table_move_col_left = function()
+  require("marklive.action").table_move_col_left()
+end
+
+M.table_move_col_right = function()
+  require("marklive.action").table_move_col_right()
+end
+
+M.table_move_row_down = function()
+  require("marklive.action").table_move_row_down()
+end
+
+M.table_move_row_up = function()
+  require("marklive.action").table_move_row_up()
+end
+
 return M
