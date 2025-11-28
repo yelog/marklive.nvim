@@ -387,6 +387,34 @@ local function apply_table_rows(ctx)
   return true
 end
 
+local function get_cursor_column_offset(line, col_idx, cursor_byte)
+  if not line then return 0 end
+  local bars = {}
+  for pos in line:gmatch("()|") do
+    table.insert(bars, pos)
+  end
+  local start_pos = bars[col_idx]
+  local next_pos = bars[col_idx + 1]
+  if not start_pos or not next_pos then return 0 end
+  local cell_start = start_pos + 1
+  return math.max(0, cursor_byte - cell_start)
+end
+
+local function move_cursor_to_cell(start_row, row_idx, col_idx, offset)
+  local line = vim.api.nvim_buf_get_lines(0, start_row + row_idx - 2, start_row + row_idx - 1, false)[1]
+  if not line then return end
+  local bars = {}
+  for pos in line:gmatch("()|") do
+    table.insert(bars, pos)
+  end
+  local s = bars[col_idx]
+  local e = bars[col_idx + 1]
+  if not s or not e then return end
+  local target = math.min(e - 1, s + offset)
+  if target < s then target = s end
+  vim.api.nvim_win_set_cursor(0, { start_row + row_idx - 1, target })
+end
+
 local function ensure_body_row(ctx)
   if not ctx.separator_idx or ctx.cursor_row_idx <= ctx.separator_idx then
     vim.notify("Cursor must be on table body row", vim.log.levels.WARN)
@@ -750,10 +778,15 @@ function M.table_move_col_left()
   normalize_rows(ctx.rows, ctx.column_count)
   local from = ctx.cursor_col_idx
   local to = ctx.cursor_col_idx - 1
+  local cursor = vim.api.nvim_win_get_cursor(0)
+  local cur_line = vim.api.nvim_buf_get_lines(0, cursor[1] - 1, cursor[1], false)[1]
+  local offset = get_cursor_column_offset(cur_line, from, cursor[2])
   for _, row in ipairs(ctx.rows) do
     row[from], row[to] = row[to], row[from]
   end
-  apply_table_rows(ctx)
+  if apply_table_rows(ctx) then
+    move_cursor_to_cell(ctx.start_row, ctx.cursor_row_idx, to, offset)
+  end
 end
 
 function M.table_move_col_right()
@@ -770,10 +803,15 @@ function M.table_move_col_right()
   end
   local from = ctx.cursor_col_idx
   local to = ctx.cursor_col_idx + 1
+  local cursor = vim.api.nvim_win_get_cursor(0)
+  local cur_line = vim.api.nvim_buf_get_lines(0, cursor[1] - 1, cursor[1], false)[1]
+  local offset = get_cursor_column_offset(cur_line, from, cursor[2])
   for _, row in ipairs(ctx.rows) do
     row[from], row[to] = row[to], row[from]
   end
-  apply_table_rows(ctx)
+  if apply_table_rows(ctx) then
+    move_cursor_to_cell(ctx.start_row, ctx.cursor_row_idx, to, offset)
+  end
 end
 
 function M.table_move_row_down()
@@ -787,9 +825,15 @@ function M.table_move_row_down()
     vim.notify("Cannot move separator row", vim.log.levels.WARN)
     return
   end
+  local cursor = vim.api.nvim_win_get_cursor(0)
+  local cur_line = vim.api.nvim_buf_get_lines(0, cursor[1] - 1, cursor[1], false)[1]
+  local offset = get_cursor_column_offset(cur_line, ctx.cursor_col_idx or 1, cursor[2])
   ctx.rows[ctx.cursor_row_idx], ctx.rows[ctx.cursor_row_idx + 1] =
       ctx.rows[ctx.cursor_row_idx + 1], ctx.rows[ctx.cursor_row_idx]
-  apply_table_rows(ctx)
+  local new_row_idx = ctx.cursor_row_idx + 1
+  if apply_table_rows(ctx) then
+    move_cursor_to_cell(ctx.start_row, new_row_idx, ctx.cursor_col_idx or 1, offset)
+  end
 end
 
 function M.table_move_row_up()
@@ -799,9 +843,15 @@ function M.table_move_row_up()
     vim.notify("No body row above to swap", vim.log.levels.WARN)
     return
   end
+  local cursor = vim.api.nvim_win_get_cursor(0)
+  local cur_line = vim.api.nvim_buf_get_lines(0, cursor[1] - 1, cursor[1], false)[1]
+  local offset = get_cursor_column_offset(cur_line, ctx.cursor_col_idx or 1, cursor[2])
   ctx.rows[ctx.cursor_row_idx], ctx.rows[ctx.cursor_row_idx - 1] =
       ctx.rows[ctx.cursor_row_idx - 1], ctx.rows[ctx.cursor_row_idx]
-  apply_table_rows(ctx)
+  local new_row_idx = ctx.cursor_row_idx - 1
+  if apply_table_rows(ctx) then
+    move_cursor_to_cell(ctx.start_row, new_row_idx, ctx.cursor_col_idx or 1, offset)
+  end
 end
 
 function M.table_delete_row()
@@ -884,6 +934,10 @@ end
 local function move_table_cell(direction)
   local ctx = get_table_context()
   if not ctx then return end
+  local cursor = vim.api.nvim_win_get_cursor(0)
+  local current_line = vim.api.nvim_buf_get_lines(0, cursor[1] - 1, cursor[1], false)[1]
+  local offset = get_cursor_column_offset(current_line, ctx.cursor_col_idx or 1, cursor[2])
+
   local row_idx = ctx.cursor_row_idx or 1
   local col_idx = ctx.cursor_col_idx or 1
   local row_count = #ctx.rows
@@ -904,10 +958,7 @@ local function move_table_cell(direction)
     if row_idx > row_count then row_idx = 1 end
   end
 
-  local target_line = vim.api.nvim_buf_get_lines(0, ctx.start_row + row_idx - 2, ctx.start_row + row_idx - 1, false)[1]
-  if not target_line then return end
-  local target_col0 = get_cell_column_position(target_line, col_idx)
-  vim.api.nvim_win_set_cursor(0, { ctx.start_row + row_idx - 1, target_col0 })
+  move_cursor_to_cell(ctx.start_row, row_idx, col_idx, offset)
 end
 
 function M.table_nav_left() move_table_cell("left") end
