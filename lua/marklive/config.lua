@@ -274,6 +274,9 @@ return {
       -- 层级关系
       hierarchy = true
     },
+    table = {
+      enable = true,
+    },
     list = {
       enable = true,
       unorder = { '-', '*', '+' }, -- Unordered list markers

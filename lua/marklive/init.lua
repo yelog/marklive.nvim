@@ -140,4 +140,8 @@ vim.api.nvim_create_user_command("MarkliveTaskToggle", function()
   require("marklive.action").toggle_task()
 end, { desc = "Toggle markdown task state" })
 
+vim.api.nvim_create_user_command("MarkliveTableFormat", function()
+  require("marklive.action").format_table()
+end, { desc = "Format markdown table at cursor" })
+
 return M

@@ -58,6 +58,167 @@ local function get_list_content_col(line)
   return #line
 end
 
+local function is_supported_filetype(valid_filetypes, filetype)
+  if type(valid_filetypes) == "string" then
+    valid_filetypes = { valid_filetypes }
+  end
+  for _, ft in ipairs(valid_filetypes or {}) do
+    if ft == filetype then
+      return true
+    end
+  end
+  return false
+end
+
+local function is_table_line(line)
+  if not line then return false end
+  if not line:match("^%s*|") then return false end
+  local pipe_count = select(2, line:gsub("|", ""))
+  return pipe_count >= 2
+end
+
+local function trim_cell(cell)
+  return (cell and cell:match("^%s*(.-)%s*$")) or ""
+end
+
+local function split_table_row(line)
+  local stripped = line:gsub("^%s*|", "", 1)
+  stripped = stripped:gsub("|%s*$", "", 1)
+  local cells = {}
+  for cell in string.gmatch(stripped .. "|", "([^|]*)|") do
+    table.insert(cells, cell)
+  end
+  if #cells == 0 then table.insert(cells, "") end
+  return cells
+end
+
+local function is_separator_row(cells)
+  if #cells == 0 then return false end
+  for _, cell in ipairs(cells) do
+    local trimmed = trim_cell(cell)
+    if trimmed == "" or not trimmed:match("^:?-+:?$") then
+      return false
+    end
+  end
+  return true
+end
+
+local function get_alignments(cells, column_count)
+  local res = {}
+  for i = 1, column_count do
+    local cell = cells[i]
+    local trimmed = trim_cell(cell or "")
+    local left_colon = trimmed:sub(1, 1) == ":"
+    local right_colon = trimmed:sub(-1) == ":"
+    local align = "left"
+    if left_colon and right_colon then
+      align = "center"
+    elseif right_colon then
+      align = "right"
+    end
+    res[i] = { align = align, left_colon = left_colon, right_colon = right_colon }
+  end
+  return res
+end
+
+local function compute_column_widths(rows, column_count)
+  local widths = {}
+  for col = 1, column_count do
+    local max_width = 0
+    for _, row in ipairs(rows) do
+      local cell = trim_cell(row[col] or "")
+      local w = vim.fn.strdisplaywidth(cell)
+      if w > max_width then max_width = w end
+    end
+    widths[col] = max_width
+  end
+  return widths
+end
+
+local function build_separator_cell(width, align_info)
+  local left_colon = align_info.left_colon
+  local right_colon = align_info.right_colon
+  local colon_count = (left_colon and 1 or 0) + (right_colon and 1 or 0)
+  local hyphen_count = width - colon_count
+  if hyphen_count < 1 then hyphen_count = 1 end
+  local content = (left_colon and ":" or "") .. string.rep("-", hyphen_count) .. (right_colon and ":" or "")
+  return " " .. content .. " "
+end
+
+local function build_content_cell(text, width, align)
+  local content_width = vim.fn.strdisplaywidth(text)
+  local extra = width - content_width
+  if extra < 0 then extra = 0 end
+  local left_pad = 1
+  local right_pad = 1
+  if align == "center" then
+    local left_extra = math.floor(extra / 2)
+    local right_extra = extra - left_extra
+    left_pad = left_pad + left_extra
+    right_pad = right_pad + right_extra
+  elseif align == "right" then
+    left_pad = left_pad + extra
+  else
+    right_pad = right_pad + extra
+  end
+  return string.rep(" ", left_pad) .. text .. string.rep(" ", right_pad)
+end
+
+local function format_table_lines(lines)
+  local min_indent = nil
+  for _, line in ipairs(lines) do
+    local indent = get_indent(line)
+    if not min_indent or indent < min_indent then
+      min_indent = indent
+    end
+  end
+  local indent_prefix = min_indent and string.rep(" ", min_indent) or ""
+  local stripped_lines = {}
+  for i, line in ipairs(lines) do
+    stripped_lines[i] = line:sub((min_indent or 0) + 1)
+  end
+
+  local rows = {}
+  local column_count = 0
+  local separator_idx = nil
+  for i, line in ipairs(stripped_lines) do
+    local cells = split_table_row(line)
+    rows[i] = cells
+    column_count = math.max(column_count, #cells)
+    if not separator_idx and is_separator_row(cells) then
+      separator_idx = i
+    end
+  end
+  if not separator_idx then
+    return nil, "No table separator row found"
+  end
+
+  for _, cells in ipairs(rows) do
+    for i = #cells + 1, column_count do
+      cells[i] = ""
+    end
+  end
+
+  local alignments = get_alignments(rows[separator_idx], column_count)
+  local widths = compute_column_widths(rows, column_count)
+
+  local formatted = {}
+  for idx, cells in ipairs(rows) do
+    local is_separator = idx == separator_idx
+    local parts = { indent_prefix, "|" }
+    for col = 1, column_count do
+      if is_separator then
+        table.insert(parts, build_separator_cell(widths[col], alignments[col]))
+      else
+        table.insert(parts, build_content_cell(trim_cell(cells[col]), widths[col], alignments[col].align))
+      end
+      table.insert(parts, "|")
+    end
+    formatted[idx] = table.concat(parts)
+  end
+  return formatted
+end
+
 -- Check if a line is a task line
 local function is_task_line(line)
   return is_task_unchecked(line) or is_task_halfchecked(line) or is_task_checked(line)
@@ -276,6 +437,57 @@ function M.toggle_task()
     end
     return
   end
+end
+
+function M.format_table()
+  local config = get_config()
+  if config.enable == false then return end
+
+  local table_cfg = config.action and config.action.table
+  if not (table_cfg and table_cfg.enable) then
+    vim.notify("MarkliveTableFormat is disabled by config", vim.log.levels.INFO)
+    return
+  end
+
+  if not is_supported_filetype(config.filetype, vim.bo.filetype) then
+    vim.notify("MarkliveTableFormat works only for configured filetypes", vim.log.levels.WARN)
+    return
+  end
+
+  local row = vim.api.nvim_win_get_cursor(0)[1]
+  local line = vim.api.nvim_buf_get_lines(0, row - 1, row, false)[1]
+  if not is_table_line(line) then
+    vim.notify("Current line is not a markdown table row", vim.log.levels.WARN)
+    return
+  end
+
+  local total = vim.api.nvim_buf_line_count(0)
+  local start_row = row
+  while start_row > 1 do
+    local prev_line = vim.api.nvim_buf_get_lines(0, start_row - 2, start_row - 1, false)[1]
+    if prev_line and is_table_line(prev_line) then
+      start_row = start_row - 1
+    else
+      break
+    end
+  end
+  local end_row = row
+  while end_row < total do
+    local next_line = vim.api.nvim_buf_get_lines(0, end_row, end_row + 1, false)[1]
+    if next_line and is_table_line(next_line) then
+      end_row = end_row + 1
+    else
+      break
+    end
+  end
+
+  local lines = vim.api.nvim_buf_get_lines(0, start_row - 1, end_row, false)
+  local formatted, err = format_table_lines(lines)
+  if not formatted then
+    vim.notify(err or "Unable to format table", vim.log.levels.WARN)
+    return
+  end
+  vim.api.nvim_buf_set_lines(0, start_row - 1, end_row, false, formatted)
 end
 
 -- ===========================
