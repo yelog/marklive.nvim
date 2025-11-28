@@ -1,6 +1,39 @@
 local utils = require('marklive.utils')
 local render = {}
 
+local function is_separator_row(cells)
+  if #cells == 0 then return false end
+  for _, cell in ipairs(cells) do
+    local trimmed = vim.trim(cell)
+    if trimmed == "" or not trimmed:match("^:?-+:?$") then
+      return false
+    end
+  end
+  return true
+end
+
+local function detect_alignments(table_cells, col_count)
+  local alignments = {}
+  for _, row in ipairs(table_cells) do
+    if is_separator_row(row) then
+      for i = 1, col_count do
+        local cell = vim.trim(row[i] or "")
+        local left_colon = cell:sub(1, 1) == ":"
+        local right_colon = cell:sub(-1) == ":"
+        local align = "left"
+        if left_colon and right_colon then
+          align = "center"
+        elseif right_colon then
+          align = "right"
+        end
+        alignments[i] = align
+      end
+      break
+    end
+  end
+  return alignments
+end
+
 -- 判断某一行是否在代码块内
 local function is_in_codeblock(bufnr, lnum)
   -- bufnr: buffer number
@@ -707,6 +740,8 @@ render.table = function(rc)
 
   local col_count = #column_max_width
 
+  local alignments = detect_alignments(table_cells, col_count)
+
   -- 构造边框行（横线）
   local function make_border_row(left, mid, right)
     local row = {}
@@ -793,19 +828,31 @@ render.table = function(rc)
         cell_width = cell_width + vim.fn.strdisplaywidth(seg[1])
       end
       local pad = column_max_width[i] - cell_width
+      local align = alignments[i] or "left"
+      local left_extra, right_extra
+      if align == "center" then
+        left_extra = math.floor(pad / 2)
+        right_extra = pad - left_extra
+      elseif align == "right" then
+        left_extra = pad
+        right_extra = 0
+      else
+        left_extra = 0
+        right_extra = pad
+      end
       -- 拼接分段
       if is_header then
-        table.insert(row, { " ", header_hl })
+        table.insert(row, { string.rep(" ", 1 + left_extra), header_hl })
         for _, seg in ipairs(segments) do
           table.insert(row, { seg[1], seg[2] or header_hl })
         end
-        table.insert(row, { string.rep(" ", pad + 1), header_hl })
+        table.insert(row, { string.rep(" ", 1 + right_extra), header_hl })
       else
-        table.insert(row, { " " })
+        table.insert(row, { string.rep(" ", 1 + left_extra) })
         for _, seg in ipairs(segments) do
           table.insert(row, { seg[1], seg[2] })
         end
-        table.insert(row, { string.rep(" ", pad + 1) })
+        table.insert(row, { string.rep(" ", 1 + right_extra) })
       end
       table.insert(row, { border[10], border_hl })
     end
@@ -1075,6 +1122,8 @@ local function render_table_row(rc, row_idx)
 
   local col_count = #column_max_width
 
+  local alignments = detect_alignments(table_cells, col_count)
+
   local function make_border_row(left, mid, right)
     local row = {}
     table.insert(row, { left, border_hl })
@@ -1144,18 +1193,30 @@ local function render_table_row(rc, row_idx)
         cell_width = cell_width + vim.fn.strdisplaywidth(seg[1])
       end
       local pad = column_max_width[i] - cell_width
+      local align = alignments[i] or "left"
+      local left_extra, right_extra
+      if align == "center" then
+        left_extra = math.floor(pad / 2)
+        right_extra = pad - left_extra
+      elseif align == "right" then
+        left_extra = pad
+        right_extra = 0
+      else
+        left_extra = 0
+        right_extra = pad
+      end
       if is_header then
-        table.insert(row, { " ", header_hl })
+        table.insert(row, { string.rep(" ", 1 + left_extra), header_hl })
         for _, seg in ipairs(segments) do
           table.insert(row, { seg[1], seg[2] or header_hl })
         end
-        table.insert(row, { string.rep(" ", pad + 1), header_hl })
+        table.insert(row, { string.rep(" ", 1 + right_extra), header_hl })
       else
-        table.insert(row, { " " })
+        table.insert(row, { string.rep(" ", 1 + left_extra) })
         for _, seg in ipairs(segments) do
           table.insert(row, { seg[1], seg[2] })
         end
-        table.insert(row, { string.rep(" ", pad + 1) })
+        table.insert(row, { string.rep(" ", 1 + right_extra) })
       end
       table.insert(row, { border[10], border_hl })
     end
