@@ -852,7 +852,9 @@ function M.table_delete_col()
   for idx, row in ipairs(ctx.rows) do
     local removed = table.remove(row, ctx.cursor_col_idx) or ""
     local line = ctx.lines and ctx.lines[idx]
-    local seg = ""
+    local seg_left = ""
+    local seg_right = ""
+    local seg_content = trim_cell(removed)
     if line then
       local bars = {}
       for pos in line:gmatch("()|") do
@@ -861,15 +863,19 @@ function M.table_delete_col()
       local s = bars[ctx.cursor_col_idx]
       local e = bars[ctx.cursor_col_idx + 1]
       if s and e then
-        seg = line:sub(s + 1, e)
+        seg_left = line:sub(s, s)
+        seg_right = line:sub(e, e)
+        seg_content = line:sub(s + 1, e - 1):match("^%s*(.-)%s*$") or seg_content
       end
     end
-    if seg == "" then
-      seg = trim_cell(removed) .. "|"
-    end
-    table.insert(removed_cells, seg)
+    table.insert(removed_cells, { seg_left ~= "" and seg_left or "|", seg_content, seg_right ~= "" and seg_right or "|" })
   end
-  set_default_register(table.concat(removed_cells, "\n"), "c")
+  local block_lines = {}
+  for _, parts in ipairs(removed_cells) do
+    -- 保留右边框，去掉左边框，方便在目标列左侧直接粘贴
+    table.insert(block_lines, parts[2] .. (parts[3] or "|"))
+  end
+  set_default_register(block_lines, "b")
   ctx.column_count = ctx.column_count - 1
   ctx.end_row = ctx.start_row - 1 + #ctx.rows
   apply_table_rows(ctx)
