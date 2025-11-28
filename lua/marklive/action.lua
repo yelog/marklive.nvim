@@ -34,6 +34,8 @@ local function get_config()
   return require("marklive.config")
 end
 
+local list_augroup_name = "MarkliveListAutocmd"
+
 -- Get indent space count
 local function get_indent(line)
   return #(line:match("^(%s*)") or "")
@@ -675,9 +677,17 @@ M._list_indent = list_indent
 
 -- 自动命令和映射
 local function setup_list_autocmd()
+  pcall(vim.api.nvim_del_augroup_by_name, list_augroup_name)
+
+  local config = get_config()
+  local list_cfg = config.action and config.action.list
+  if config.enable == false or not (list_cfg and list_cfg.enable) then
+    return
+  end
+
   -- InsertEnter时记录插入模式起始行
   local insert_start_row = nil
-  local group = vim.api.nvim_create_augroup("MarkliveListAutocmd", { clear = true })
+  local group = vim.api.nvim_create_augroup(list_augroup_name, { clear = true })
   vim.api.nvim_create_autocmd("InsertEnter", {
     pattern = "*",
     group = group,
@@ -984,6 +994,8 @@ local function setup_list_autocmd()
     end
   })
 end
+
+M.setup_list_autocmd = setup_list_autocmd
 
 -- 初始化
 setup_list_autocmd()

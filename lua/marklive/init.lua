@@ -1,7 +1,7 @@
 local default_config = require('marklive.config')
 local utils = require('marklive.utils')
 local render = require('marklive.render')
-require('marklive.action')
+local action = require('marklive.action')
 local M = {}
 -- treesitter query
 local query = ""
@@ -56,6 +56,11 @@ M.setup = function(config)
     vim.opt.concealcursor = 'nc'
   end
 
+  if not M.config.enable then
+    action.setup_list_autocmd()
+    return
+  end
+
   -- enable marklive
   if M.config.enable then
     M.enable()
@@ -69,8 +74,9 @@ end
 
 
 M.enable = function()
-  M.render();
   M.config.enable = true
+  action.setup_list_autocmd()
+  M.render()
 
   -- set highlight
   utils.setHighlight(M.config.highlight_config or {}, vim.o.filetype)
@@ -95,6 +101,7 @@ end
 
 M.disable = function()
   M.config.enable = false
+  action.setup_list_autocmd()
   vim.api.nvim_buf_clear_namespace(0, M.namespace, 0, -1)
 
   -- clear highlight
