@@ -9,7 +9,6 @@ A Neovim plugin for rendering markdown files in terminal
 - 💪 Built-in `markdown elements` config, `markdown` files work out of the box
 - 💞 Built-in commands `MarkliveEnable`, `MarkliveDisable`, `MarkliveToggle` to enable/disable/toggle the `marklive` feature
 - ✅ Built-in command `MarkliveTaskToggle` to toggle markdown task state (supports cascading according to `action.task.hierarchy` config)
-- 📐 Built-in command `MarkliveTableFormat` to align the pipe table under cursor
 - 🛴 Supports automatically disabling the `marklive` feature on the current line for easy editing
 - 🔎 Highly configurable, allowing custom icons for each markdown element, and even custom displays for `html` files
 
@@ -88,14 +87,14 @@ vim.keymap.set("n", "<CR>", "<cmd>MarkliveTaskToggle<cr>", { desc = "Toggle mark
 
 If you don't want to use a Nerd Font, you can replace the icons with Unicode symbols.
 
-## Table Format (`MarkliveTableFormat`)
+## Table Format
 
-`MarkliveTableFormat` 会格式化光标所在的管道表格，按照分隔行推断对齐方式：
+`marklive` 提供 `table_format()` 用于格式化光标所在的管道表格，按照分隔行推断对齐方式：
 - 每列宽度取所有行去除左右空格后的最大显示宽度，内容与边框符号至少留 1 个空格。
 - 分隔行 `----`/`:---` 视为左对齐，`:---:` 居中，`---:` 右对齐；需要补齐时在冒号间添加 `-`，其他行用空格补齐。
 - 默认开启，可通过 `action.table.enable = false` 关闭。
 
-示例：
+配置示例：
 ```lua
 require('marklive').setup({
   action = {
@@ -104,10 +103,14 @@ require('marklive').setup({
 })
 ```
 
-你可以绑定一个快捷键来快速对齐表格，例如：
+插件在全局表 `Marklive` 上暴露了方法，便于通过 `keys` 配置绑定快捷键（风格示例如下）：
 ```lua
-vim.keymap.set("n", "<leader>tf", "<cmd>MarkliveTableFormat<cr>", { desc = "Format markdown table" })
+-- 例如在 Lazy.nvim opts 中
+keys = {
+  { "<leader>mtf", function() Marklive.table_format() end, desc = "Format markdown table" },
+}
 ```
+> 需要其他自定义函数时，也可以将它们放在同一个全局表中统一管理，避免散落的全局函数。
 
 # 📝 Plan
 

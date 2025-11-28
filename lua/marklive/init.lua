@@ -3,6 +3,8 @@ local utils = require('marklive.utils')
 local render = require('marklive.render')
 local action = require('marklive.action')
 local M = {}
+-- 暴露全局引用，便于在按键映射等场景直接调用
+_G.Marklive = M
 -- treesitter query
 local query = ""
 local regex_list = {}
@@ -140,8 +142,8 @@ vim.api.nvim_create_user_command("MarkliveTaskToggle", function()
   require("marklive.action").toggle_task()
 end, { desc = "Toggle markdown task state" })
 
-vim.api.nvim_create_user_command("MarkliveTableFormat", function()
+M.table_format = function()
   require("marklive.action").format_table()
-end, { desc = "Format markdown table at cursor" })
+end
 
 return M

@@ -445,12 +445,12 @@ function M.format_table()
 
   local table_cfg = config.action and config.action.table
   if not (table_cfg and table_cfg.enable) then
-    vim.notify("MarkliveTableFormat is disabled by config", vim.log.levels.INFO)
+    vim.notify("Table format is disabled by config", vim.log.levels.INFO)
     return
   end
 
   if not is_supported_filetype(config.filetype, vim.bo.filetype) then
-    vim.notify("MarkliveTableFormat works only for configured filetypes", vim.log.levels.WARN)
+    vim.notify("Table format works only for configured filetypes", vim.log.levels.WARN)
     return
   end
 
