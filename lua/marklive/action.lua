@@ -81,6 +81,11 @@ local function trim_cell(cell)
   return (cell and cell:match("^%s*(.-)%s*$")) or ""
 end
 
+local function set_default_register(lines, regtype)
+  if not lines then return end
+  vim.fn.setreg('"', lines, regtype or "c")
+end
+
 local function split_table_row(line)
   local stripped = line:gsub("^%s*|", "", 1)
   stripped = stripped:gsub("|%s*$", "", 1)
@@ -804,6 +809,8 @@ function M.table_delete_row()
   if not ctx or not ensure_body_row(ctx) then return end
   local target_col_idx = ctx.cursor_col_idx or 1
   local del_line = ctx.start_row + ctx.cursor_row_idx - 1
+  local removed_line = vim.api.nvim_buf_get_lines(0, del_line - 1, del_line, false)
+  set_default_register(removed_line, "V")
   vim.api.nvim_buf_set_lines(0, del_line - 1, del_line, false, {})
 
   -- 对齐剩余表格（若光标仍在表格内）
@@ -841,9 +848,28 @@ function M.table_delete_col()
     vim.notify("Cannot delete the only column", vim.log.levels.WARN)
     return
   end
-  for _, row in ipairs(ctx.rows) do
-    table.remove(row, ctx.cursor_col_idx)
+  local removed_cells = {}
+  for idx, row in ipairs(ctx.rows) do
+    local removed = table.remove(row, ctx.cursor_col_idx) or ""
+    local line = ctx.lines and ctx.lines[idx]
+    local seg = ""
+    if line then
+      local bars = {}
+      for pos in line:gmatch("()|") do
+        table.insert(bars, pos)
+      end
+      local s = bars[ctx.cursor_col_idx]
+      local e = bars[ctx.cursor_col_idx + 1]
+      if s and e then
+        seg = line:sub(s + 1, e)
+      end
+    end
+    if seg == "" then
+      seg = trim_cell(removed) .. "|"
+    end
+    table.insert(removed_cells, seg)
   end
+  set_default_register(table.concat(removed_cells, "\n"), "c")
   ctx.column_count = ctx.column_count - 1
   ctx.end_row = ctx.start_row - 1 + #ctx.rows
   apply_table_rows(ctx)
