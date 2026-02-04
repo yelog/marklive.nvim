@@ -21,22 +21,16 @@ end
 local function set_block_quote_marker(bufnr, namespace, lnum, gt_start, gt_end, line, icon, hl_group,
                                       repeat_on_wrap)
   if repeat_on_wrap and has_virt_text_repeat_linebreak then
-    local marker_end_col = gt_end
     local marker_prefix = icon
     if line:sub(gt_end + 1, gt_end + 1) == ' ' then
-      marker_end_col = gt_end + 1
       marker_prefix = icon .. ' '
     end
 
     if ensure_showbreak_padding(vim.fn.strdisplaywidth(marker_prefix)) then
       local ok = pcall(vim.api.nvim_buf_set_extmark, bufnr, namespace, lnum, gt_start - 1, {
-        end_line = lnum,
-        end_col = marker_end_col,
-        conceal = '',
         virt_text = { { marker_prefix, hl_group } },
         virt_text_pos = 'overlay',
         virt_text_repeat_linebreak = true,
-        hl_group = hl_group,
         hl_mode = 'combine',
         priority = 0,
       })
