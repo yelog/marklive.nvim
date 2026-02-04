@@ -1,3 +1,10 @@
+local is_dark_bg = vim.o.background ~= 'light'
+-- 对齐 GitHub Markdown（Primer）常用配色：
+-- light: border #d1d9e0, muted bg #f6f8fa
+-- dark:  border #3d444d, muted bg #151b23
+local block_quote_border_fg = is_dark_bg and '#3d444d' or '#d1d9e0'
+local block_quote_bg = is_dark_bg and '#151b23' or '#f6f8fa'
+
 return {
   -- is enable
   enable = true,
@@ -30,7 +37,8 @@ return {
       highlight = { fg = "#00c4b0", bg = "#1f262f" }
     },
     markdownBlockquote = {
-      highlight = { fg = '#e6e1cf', bg = "#000000" }
+      -- 对齐 GitHub/Notion 风格：弱化竖线 + 轻微底色
+      highlight = { fg = block_quote_border_fg, bg = block_quote_bg }
     },
     markdownFootnote = {
       highlight = { fg = '#5c92fa' }
@@ -210,7 +218,7 @@ return {
       render = 'code_block'
     },
     block_quote = { -- Block quote
-      icon = "▋",
+      icon = "▎",
       render = "block_quote",
       hl_group = 'markdownBlockquote',
       callout = {
