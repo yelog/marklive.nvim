@@ -18,17 +18,27 @@ local function ensure_showbreak_padding(width)
   return showbreak_width >= width
 end
 
-local function set_block_quote_marker(bufnr, namespace, lnum, gt_start, gt_end, line, icon, hl_group,
+local function set_block_quote_marker(bufnr, namespace, lnum, gt_end, line, icon, hl_group,
                                       repeat_on_wrap)
-  if repeat_on_wrap and has_virt_text_repeat_linebreak then
-    local marker_prefix = icon
-    if line:sub(gt_end + 1, gt_end + 1) == ' ' then
-      marker_prefix = icon .. ' '
-    end
+  local marker_col = gt_end - 1
+  local marker_end_col = gt_end
+  if line:sub(gt_end + 1, gt_end + 1) == ' ' then
+    marker_end_col = gt_end + 1
+  end
 
-    if ensure_showbreak_padding(vim.fn.strdisplaywidth(marker_prefix)) then
-      local ok = pcall(vim.api.nvim_buf_set_extmark, bufnr, namespace, lnum, gt_start - 1, {
-        virt_text = { { marker_prefix, hl_group } },
+  -- 将 `> ` 收敛为单个竖线，避免正文与左边框之间出现额外空白
+  vim.api.nvim_buf_set_extmark(bufnr, namespace, lnum, marker_col, {
+    end_line = lnum,
+    end_col = marker_end_col,
+    conceal = icon,
+    hl_group = hl_group,
+    priority = 0,
+  })
+
+  if repeat_on_wrap and has_virt_text_repeat_linebreak then
+    if ensure_showbreak_padding(vim.fn.strdisplaywidth(icon)) then
+      local ok = pcall(vim.api.nvim_buf_set_extmark, bufnr, namespace, lnum, marker_col, {
+        virt_text = { { icon, hl_group } },
         virt_text_pos = 'overlay',
         virt_text_repeat_linebreak = true,
         hl_mode = 'combine',
@@ -39,14 +49,6 @@ local function set_block_quote_marker(bufnr, namespace, lnum, gt_start, gt_end, 
       end
     end
   end
-
-  vim.api.nvim_buf_set_extmark(bufnr, namespace, lnum, gt_start - 1, {
-    end_line = lnum,
-    end_col = gt_end,
-    conceal = icon,
-    hl_group = hl_group,
-    priority = 0,
-  })
 end
 
 local function is_separator_row(cells)
@@ -375,7 +377,7 @@ render.block_quote = function(rc)
       end
 
       -- callout 启用软折行续行前缀：每个换行显示同样的 block quote 竖线
-      set_block_quote_marker(bufnr, namespace, lnum, gt_start, gt_end, line, icon, use_hl_group, callout_key ~= nil)
+      set_block_quote_marker(bufnr, namespace, lnum, gt_end, line, icon, use_hl_group, callout_key ~= nil)
     end
 
     -- 只为没有背景色的区域设置 block_quote 的背景色
