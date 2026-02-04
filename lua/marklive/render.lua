@@ -713,6 +713,17 @@ render._init_visible = function(namespace, config, query, regex_list)
               priority = 0,
             })
           end
+
+          if name == 'inline_code' then
+            local hl_group = config.render[name].hl_group or name
+            -- 内联代码需要覆盖整段（含内容）高亮，避免被 block_quote/callout 背景吞掉
+            vim.api.nvim_buf_set_extmark(bufnr, namespace, lnum, match.start_col, {
+              end_line = lnum,
+              end_col = match.end_col + 1,
+              hl_group = hl_group,
+              priority = 5000,
+            })
+          end
         end
         ::continue_regex::
       end
