@@ -917,7 +917,11 @@ render.table = function(rc)
         end
         -- 中间内容
         if mid and #mid > 0 then
-          table.insert(res, { mid, hl_group })
+          if hl_group == "markdownCode" then
+            table.insert(res, { " " .. mid .. " ", hl_group })
+          else
+            table.insert(res, { mid, hl_group })
+          end
         end
         last_end = e + 1
       end
@@ -987,7 +991,7 @@ render.table = function(rc)
   local win_width = vim.api.nvim_win_get_width(0)
   local virt_opts = {
     virt_text_pos = "overlay",
-    hl_mode = "combine",
+    hl_mode = "replace",
   }
 
   -- 顶部边框和底部边框通过 virt_lines 渲染在表格首行上方和末行下方
@@ -1283,7 +1287,11 @@ local function render_table_row(rc, row_idx)
           vim.list_extend(res, split_segments(before, pat_idx + 1))
         end
         if mid and #mid > 0 then
-          table.insert(res, { mid, hl_group })
+          if hl_group == "markdownCode" then
+            table.insert(res, { " " .. mid .. " ", hl_group })
+          else
+            table.insert(res, { mid, hl_group })
+          end
         end
         last_end = e + 1
       end
@@ -1360,7 +1368,7 @@ local function render_table_row(rc, row_idx)
 
   local virt_opts = {
     virt_text_pos = "overlay",
-    hl_mode = "combine",
+    hl_mode = "replace",
   }
 
   -- 检查当前行是否为 markdown 表格分隔线（如 |---|---|），如果是则只渲染横线，不渲染内容

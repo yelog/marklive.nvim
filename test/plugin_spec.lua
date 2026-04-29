@@ -127,3 +127,82 @@ describe('heading marker indentation', function()
     assert.is_true(found_conceal)
   end)
 end)
+
+describe('table markdown cell styling', function()
+  local function render_table(lines)
+    local namespace = vim.api.nvim_create_namespace('marklive_table_style_test')
+    vim.api.nvim_buf_clear_namespace(0, namespace, 0, -1)
+    vim.api.nvim_buf_set_lines(0, 0, -1, false, lines)
+    vim.api.nvim_win_set_cursor(0, { 1, 0 })
+
+    render.table({
+      bufnr = 0,
+      namespace = namespace,
+      config = {},
+      start_row = 0,
+      end_row = #lines,
+    })
+
+    return namespace
+  end
+
+  local function find_row_virt_text(namespace, row)
+    local extmarks = vim.api.nvim_buf_get_extmarks(0, namespace, 0, -1, { details = true })
+    for _, extmark in ipairs(extmarks) do
+      local details = extmark[4]
+      if extmark[2] == row and details and details.virt_text then
+        return details
+      end
+    end
+
+    return nil
+  end
+
+  before_each(function()
+    vim.cmd('enew!')
+  end)
+
+  it('renders inline code as a padded code chip without combining source highlights', function()
+    local namespace = render_table({
+      '| Header1 | Header2 | Header3 |',
+      '| ------- | ------- | ------- |',
+      '| Content1 | `Content5` | Content6 |',
+    })
+    local details = find_row_virt_text(namespace, 2)
+
+    assert.is_not_nil(details)
+    assert.are.equal('replace', details.hl_mode)
+
+    local found_code = false
+    for _, chunk in ipairs(details.virt_text) do
+      if chunk[1] == ' Content5 ' and chunk[2] == 'markdownCode' then
+        found_code = true
+      end
+      assert.is_false(chunk[1]:find('│', 1, true) ~= nil and chunk[2] == 'markdownCode')
+    end
+
+    assert.is_true(found_code)
+  end)
+
+  it('keeps strikethrough styling away from table borders', function()
+    local namespace = render_table({
+      '| Header1 | Header2 | Header3 |',
+      '| ------- | ------- | ------- |',
+      '| ~~Content4~~ | ~~Content5~~ | Content6 |',
+    })
+    local details = find_row_virt_text(namespace, 2)
+
+    assert.is_not_nil(details)
+    assert.are.equal('replace', details.hl_mode)
+
+    local strike_text = {}
+    for _, chunk in ipairs(details.virt_text) do
+      if chunk[2] == 'markdownStrike' then
+        table.insert(strike_text, chunk[1])
+        assert.is_false(chunk[1]:find('│', 1, true) ~= nil)
+      end
+    end
+
+    assert.are.same({ 'Content4', 'Content5' }, strike_text)
+  end)
+end)
