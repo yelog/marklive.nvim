@@ -268,27 +268,39 @@ return {
     atx_h1_marker = { -- Heading 1
       icon = "󰉫",
       hl_group = "markdownH1Delimiter",
+      indent = 0,
+      render = "heading_marker",
       -- hl_fill = true,
     },
     atx_h2_marker = { -- Heading 2
       icon = "󰉬",
-      hl_group = "markdownH2Delimiter"
+      hl_group = "markdownH2Delimiter",
+      indent = 2,
+      render = "heading_marker"
     },
     atx_h3_marker = { -- Heading 3
       icon = "󰉭",
-      hl_group = "markdownH3Delimiter"
+      hl_group = "markdownH3Delimiter",
+      indent = 4,
+      render = "heading_marker"
     },
     atx_h4_marker = { -- Heading 4
       icon = "󰉮",
-      hl_group = "markdownH4Delimiter"
+      hl_group = "markdownH4Delimiter",
+      indent = 6,
+      render = "heading_marker"
     },
     atx_h5_marker = { -- Heading 5
       icon = "󰉯",
-      hl_group = "markdownH5Delimiter"
+      hl_group = "markdownH5Delimiter",
+      indent = 8,
+      render = "heading_marker"
     },
     atx_h6_marker = { -- Heading 6
       icon = "󰉰",
-      hl_group = "markdownH6Delimiter"
+      hl_group = "markdownH6Delimiter",
+      indent = 10,
+      render = "heading_marker"
     },
     tag = { -- Tag
       icon = "📌",

@@ -671,6 +671,9 @@ render._init_visible = function(namespace, config, query, regex_list)
           bufnr = bufnr,
           namespace = namespace,
           config = config,
+          name = name,
+          render_config = config.render[name],
+          indent = config.render[name].indent,
           hl_group = hl_group,
           line = line,
           win_width = width,
@@ -685,6 +688,9 @@ render._init_visible = function(namespace, config, query, regex_list)
           bufnr = bufnr,
           namespace = namespace,
           config = config,
+          name = name,
+          render_config = config.render[name],
+          indent = config.render[name].indent,
           hl_group = hl_group,
           line = line,
           win_width = width,
@@ -1044,6 +1050,28 @@ render.table = function(rc)
     virt_lines = { bottom_border },
     virt_lines_above = false,
     hl_mode = "combine",
+  })
+end
+
+-- 用于渲染 markdown 标题 marker
+---@param rc table
+render.heading_marker = function(rc)
+  local indent = tonumber(rc.indent) or 0
+  if indent > 0 then
+    vim.api.nvim_buf_set_extmark(rc.bufnr, rc.namespace, rc.start_row, rc.start_col, {
+      virt_text = { { string.rep(' ', indent), rc.hl_group } },
+      virt_text_pos = 'inline',
+      hl_mode = 'combine',
+      priority = 0,
+    })
+  end
+
+  vim.api.nvim_buf_set_extmark(rc.bufnr, rc.namespace, rc.start_row, rc.start_col, {
+    end_line = rc.end_row,
+    end_col = rc.end_col,
+    conceal = rc.icon,
+    hl_group = rc.hl_group,
+    priority = 0,
   })
 end
 

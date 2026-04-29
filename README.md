@@ -80,6 +80,21 @@ require('marklive').setup({
 })
 ```
 
+## Heading Indentation
+
+ATX headings are indented by level when rendered: H1 has no extra indent, H2 adds 2 spaces, H3 adds 4 spaces, and so on through H6.
+
+You can override the default indentation through each heading marker config:
+
+```lua
+require('marklive').setup({
+  render = {
+    atx_h2_marker = { indent = 2 },
+    atx_h3_marker = { indent = 4 },
+  },
+})
+```
+
 ## Task Toggle (`MarkliveTaskToggle`)
 
 You can use the command `:MarkliveTaskToggle` to toggle the state of markdown tasks (checkboxes) under the cursor.

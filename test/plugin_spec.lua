@@ -86,3 +86,44 @@ describe('code block language badge', function()
     assert.is_nil(details)
   end)
 end)
+
+describe('heading marker indentation', function()
+  before_each(function()
+    vim.cmd('enew!')
+  end)
+
+  it('adds inline indentation before heading markers', function()
+    local namespace = vim.api.nvim_create_namespace('marklive_heading_marker_test')
+    vim.api.nvim_buf_clear_namespace(0, namespace, 0, -1)
+    vim.api.nvim_buf_set_lines(0, 0, -1, false, { '### Level 3 Heading' })
+
+    render.heading_marker({
+      bufnr = 0,
+      namespace = namespace,
+      hl_group = 'markdownH3Delimiter',
+      icon = '󰉭',
+      indent = 4,
+      start_row = 0,
+      start_col = 0,
+      end_row = 0,
+      end_col = 3,
+    })
+
+    local extmarks = vim.api.nvim_buf_get_extmarks(0, namespace, 0, -1, { details = true })
+    local found_indent = false
+    local found_conceal = false
+    for _, extmark in ipairs(extmarks) do
+      local details = extmark[4]
+      local text = virt_text_to_string(details and details.virt_text)
+      if details and details.virt_text_pos == 'inline' and text == '    ' then
+        found_indent = true
+      end
+      if details and details.conceal == '󰉭' then
+        found_conceal = true
+      end
+    end
+
+    assert.is_true(found_indent)
+    assert.is_true(found_conceal)
+  end)
+end)
