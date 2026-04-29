@@ -105,6 +105,64 @@ local function is_in_codeblock(bufnr, lnum)
   return codeblock_count % 2 == 1
 end
 
+local codeblock_language_aliases = {
+  bash = 'sh',
+  cplusplus = 'cpp',
+  ['c++'] = 'cpp',
+  dockerfile = 'docker',
+  fish = 'sh',
+  javascript = 'js',
+  javascriptreact = 'react',
+  jsx = 'react',
+  markdown = 'md',
+  node = 'js',
+  nodejs = 'js',
+  python = 'py',
+  python3 = 'py',
+  shell = 'sh',
+  terminal = 'sh',
+  typescript = 'ts',
+  typescriptreact = 'react',
+  tsx = 'react',
+  vimscript = 'vim',
+  yml = 'yaml',
+  zsh = 'sh',
+}
+
+local default_codeblock_language_style = { icon = '', fg = '#89B4FA' }
+
+local function normalize_codeblock_language(lang)
+  if not lang or lang == '' then
+    return ''
+  end
+
+  return tostring(lang):lower():gsub('^%s+', ''):gsub('%s+$', '')
+end
+
+local function extract_codeblock_language(first_line)
+  local lang = first_line:match('^%s*```+%s*{%s*%.([%w_+.-]+)')
+    or first_line:match('^%s*~~~+%s*{%s*%.([%w_+.-]+)')
+    or first_line:match('^%s*```+%s*([%w_+.-]+)')
+    or first_line:match('^%s*~~~+%s*([%w_+.-]+)')
+
+  return normalize_codeblock_language(lang)
+end
+
+local function get_codeblock_language_style(styles, lang)
+  local canonical_lang = codeblock_language_aliases[lang] or lang
+  return (styles and (styles[lang] or styles[canonical_lang] or styles.default))
+    or default_codeblock_language_style
+end
+
+local function codeblock_language_hl_group(lang)
+  local suffix = lang:gsub('[^%w_]', '_')
+  if suffix == '' then
+    suffix = 'default'
+  end
+
+  return 'MarkliveCodeblockLang_' .. suffix
+end
+
 -- render.render_padding = function(namespace, icon_padding, padding_index, start_row, start_col, end_row, end_col, hl_group)
 --   -- The final construction is in the format of {{0, 0}, {0, 0}}, if icon_padding is a single number, it is converted to {{0, 0}}
 --   -- If it is two numbers {0, 0}, it is {{0,0}}, if it is already in the format of {{0,0}}, no processing is done
@@ -611,20 +669,8 @@ render._init_visible = function(namespace, config, query, regex_list)
       if type(config.render[name].render) == "function" then
         config.render[name].render({
           bufnr = bufnr,
-            namespace = namespace,
-            hl_group = hl_group,
-            line = line,
-            win_width = width,
-            icon = icon,
-            start_row = start_row,
-            start_col = start_col,
-            end_row = end_row,
-            end_col = end_col
-        })
-      elseif type(config.render[name].render) == 'string' and type(render[config.render[name].render]) ~= 'nil' then
-        render[config.render[name].render]({
-          bufnr = bufnr,
           namespace = namespace,
+          config = config,
           hl_group = hl_group,
           line = line,
           win_width = width,
@@ -632,7 +678,21 @@ render._init_visible = function(namespace, config, query, regex_list)
           start_row = start_row,
           start_col = start_col,
           end_row = end_row,
-          end_col = end_col
+          end_col = end_col,
+        })
+      elseif type(config.render[name].render) == 'string' and type(render[config.render[name].render]) ~= 'nil' then
+        render[config.render[name].render]({
+          bufnr = bufnr,
+          namespace = namespace,
+          config = config,
+          hl_group = hl_group,
+          line = line,
+          win_width = width,
+          icon = icon,
+          start_row = start_row,
+          start_col = start_col,
+          end_row = end_row,
+          end_col = end_col,
         })
       else
         if config.render[name].whole_line then
@@ -996,14 +1056,15 @@ render.code_block = function(rc)
 
   local bufnr = rc.bufnr
   local namespace = rc.namespace
+  local config = rc.config or require('marklive').config
+  local code_block_config = config and config.render and config.render.code_block or {}
   local start_row = rc.start_row
   local end_row = rc.end_row
   local lines = vim.api.nvim_buf_get_lines(bufnr, start_row, end_row, false)
 
   local first_line = lines[1] or ""
   local is_fenced_block = first_line:match("^%s*```+") ~= nil or first_line:match("^%s*~~~+") ~= nil
-  local lang = first_line:match("^%s*```+(%w+)") or first_line:match("^%s*~~~+(%w+)")
-  if not lang then lang = "" end
+  local lang = extract_codeblock_language(first_line)
 
   -- 获取光标位置
   local cursor = vim.api.nvim_win_get_cursor(0)
@@ -1052,13 +1113,25 @@ render.code_block = function(rc)
     overlay_line(start_row)
   end
 
-  if lang and lang ~= "" then
-    local lang_label = " " .. lang .. " "
+  if lang and lang ~= "" and cursor_row ~= start_row then
+    local lang_style = get_codeblock_language_style(code_block_config.language_styles, lang)
+    local lang_hl = lang_style.hl_group or codeblock_language_hl_group(lang)
+    if not lang_style.hl_group then
+      vim.api.nvim_set_hl(0, lang_hl, {
+        bg = "#24283B",
+        bold = true,
+        fg = lang_style.fg or default_codeblock_language_style.fg,
+      })
+    end
+
+    local icon = lang_style.icon or default_codeblock_language_style.icon
+    local icon_text = icon ~= "" and icon .. " " or ""
+    local lang_label = " " .. icon_text .. lang .. " "
     vim.api.nvim_buf_set_extmark(bufnr, namespace, start_row, 0, {
-      virt_text = { { lang_label, codeblock_hl } },
-      virt_text_pos = "right_align",
+      virt_text = { { lang_label, lang_hl } },
+      virt_text_pos = "overlay",
       hl_mode = "combine",
-      priority = 10,
+      priority = 20,
     })
   end
 

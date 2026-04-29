@@ -60,6 +60,26 @@ Plug 'yelog/marklive.nvim'
 
 The default configuration for **marklive.nvim** is shown in the link [config.lua](https://github.com/yelog/marklive.nvim/blob/main/lua/marklive/config.lua)
 
+## Code Block Language Badge
+
+Fenced code blocks render the language badge on the left side of the first line. The badge uses language-aware Nerd Font icons and high-contrast colors by default.
+
+You can override or add languages through `render.code_block.language_styles`:
+
+```lua
+require('marklive').setup({
+  render = {
+    code_block = {
+      language_styles = {
+        default = { icon = '', fg = '#89B4FA' },
+        lua = { icon = '', fg = '#7AA2F7' },
+        python = { icon = '', fg = '#FFD43B' },
+      },
+    },
+  },
+})
+```
+
 ## Task Toggle (`MarkliveTaskToggle`)
 
 You can use the command `:MarkliveTaskToggle` to toggle the state of markdown tasks (checkboxes) under the cursor.
