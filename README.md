@@ -80,9 +80,11 @@ require('marklive').setup({
 })
 ```
 
-## Heading Indentation
+## Heading Styling
 
 ATX headings are indented by level when rendered: H1 has no extra indent, H2 adds 2 spaces, H3 adds 4 spaces, and so on through H6.
+
+Headings also render a full-line background by default. Each level uses a low-saturation background from the same hue as its heading color, making heading rows easier to distinguish from nested lists and task items without overpowering the document body.
 
 You can override the default indentation through each heading marker config:
 
@@ -91,6 +93,20 @@ require('marklive').setup({
   render = {
     atx_h2_marker = { indent = 2 },
     atx_h3_marker = { indent = 4 },
+  },
+})
+```
+
+You can customize the heading foreground/background through the matching heading highlight groups, or disable the full-line background for a level:
+
+```lua
+require('marklive').setup({
+  highlight_config = {
+    markdownH2 = { highlight = { fg = '#f7c59f', bg = '#3a3028', bold = true } },
+    markdownH2Delimiter = { highlight = { fg = '#f7c59f', bg = '#3a3028', bold = true } },
+  },
+  render = {
+    atx_h2_marker = { line_background = false },
   },
 })
 ```

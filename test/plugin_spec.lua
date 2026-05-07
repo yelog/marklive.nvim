@@ -126,6 +126,63 @@ describe('heading marker indentation', function()
     assert.is_true(found_indent)
     assert.is_true(found_conceal)
   end)
+
+  it('renders a full-line background for headings', function()
+    local namespace = vim.api.nvim_create_namespace('marklive_heading_background_test')
+    local line = '### Level 3 Heading'
+    local win_width = 30
+    vim.api.nvim_buf_clear_namespace(0, namespace, 0, -1)
+    vim.api.nvim_buf_set_lines(0, 0, -1, false, { line })
+    vim.api.nvim_set_hl(0, 'MarkliveTestHeadingDelimiter', {
+      fg = '#00a79d',
+      bg = '#173434',
+      bold = true,
+    })
+
+    render.heading_marker({
+      bufnr = 0,
+      namespace = namespace,
+      render_config = { line_background = true },
+      hl_group = 'MarkliveTestHeadingDelimiter',
+      icon = '󰉭',
+      indent = 4,
+      line = line,
+      win_width = win_width,
+      start_row = 0,
+      start_col = 0,
+      end_row = 0,
+      end_col = 3,
+    })
+
+    local bg_group = 'MarkliveHeadingLineBg_MarkliveTestHeadingDelimiter'
+    local bg_hl = vim.api.nvim_get_hl(0, { name = bg_group, link = false })
+    local extmarks = vim.api.nvim_buf_get_extmarks(0, namespace, 0, -1, { details = true })
+    local found_line_background = false
+    local found_fill = false
+    local found_indent_background = false
+    local expected_fill = string.rep(' ', win_width - vim.fn.strdisplaywidth(line))
+
+    for _, extmark in ipairs(extmarks) do
+      local details = extmark[4]
+      local text = virt_text_to_string(details and details.virt_text)
+      if details and details.hl_group == bg_group and details.end_col == #line then
+        found_line_background = true
+      end
+      if details and details.virt_text_pos == 'overlay' then
+        found_fill = found_fill
+          or (text == expected_fill and details.virt_text[1][2] == bg_group)
+      end
+      if details and details.virt_text_pos == 'inline' then
+        found_indent_background = found_indent_background
+          or (text == '    ' and details.virt_text[1][2] == bg_group)
+      end
+    end
+
+    assert.are.equal(0x173434, bg_hl.bg)
+    assert.is_true(found_line_background)
+    assert.is_true(found_fill)
+    assert.is_true(found_indent_background)
+  end)
 end)
 
 describe('table markdown cell styling', function()

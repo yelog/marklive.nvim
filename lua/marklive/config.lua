@@ -4,6 +4,21 @@ local is_dark_bg = vim.o.background ~= 'light'
 -- dark:  border #3d444d, muted bg #151b23
 local block_quote_border_fg = is_dark_bg and '#3d444d' or '#d1d9e0'
 local block_quote_bg = is_dark_bg and '#151b23' or '#f6f8fa'
+local heading_bg = is_dark_bg and {
+  h1 = '#3a2428',
+  h2 = '#3a3028',
+  h3 = '#173434',
+  h4 = '#29263a',
+  h5 = '#242d3d',
+  h6 = '#332b3b',
+} or {
+  h1 = '#fff0ed',
+  h2 = '#fff4ea',
+  h3 = '#e5f7f5',
+  h4 = '#f1eff8',
+  h5 = '#eef4fb',
+  h6 = '#f7f0fa',
+}
 
 return {
   -- is enable
@@ -44,40 +59,40 @@ return {
       highlight = { fg = '#5c92fa' }
     },
     markdownH1 = {
-      highlight = { fg = '#ff6f61', bold = true }
+      highlight = { fg = '#ff6f61', bg = heading_bg.h1, bold = true }
     },
     markdownH1Delimiter = {
-      highlight = { fg = '#ff6f61', bold = true }
+      highlight = { fg = '#ff6f61', bg = heading_bg.h1, bold = true }
     },
     markdownH2 = {
-      highlight = { fg = "#f7c59f", bold = true }
+      highlight = { fg = "#f7c59f", bg = heading_bg.h2, bold = true }
     },
     markdownH2Delimiter = {
-      highlight = { fg = "#f7c59f", bold = true }
+      highlight = { fg = "#f7c59f", bg = heading_bg.h2, bold = true }
     },
     markdownH3 = {
-      highlight = { fg = "#00a79d", bold = true }
+      highlight = { fg = "#00a79d", bg = heading_bg.h3, bold = true }
     },
     markdownH3Delimiter = {
-      highlight = { fg = "#00a79d", bold = true }
+      highlight = { fg = "#00a79d", bg = heading_bg.h3, bold = true }
     },
     markdownH4 = {
-      highlight = { fg = "#6b5b95", bold = true }
+      highlight = { fg = "#6b5b95", bg = heading_bg.h4, bold = true }
     },
     markdownH4Delimiter = {
-      highlight = { fg = "#6b5b95", bold = true }
+      highlight = { fg = "#6b5b95", bg = heading_bg.h4, bold = true }
     },
     markdownH5 = {
-      highlight = { fg = "#92a8d1", bold = true }
+      highlight = { fg = "#92a8d1", bg = heading_bg.h5, bold = true }
     },
     markdownH5Delimiter = {
-      highlight = { fg = "#92a8d1", bold = true }
+      highlight = { fg = "#92a8d1", bg = heading_bg.h5, bold = true }
     },
     markdownH6 = {
-      highlight = { fg = "#E8DAEF", bold = true }
+      highlight = { fg = "#E8DAEF", bg = heading_bg.h6, bold = true }
     },
     markdownH6Delimiter = {
-      highlight = { fg = "#E8DAEF", bold = true }
+      highlight = { fg = "#E8DAEF", bg = heading_bg.h6, bold = true }
     },
     -- extend
     markliveMarkText = {
@@ -269,6 +284,7 @@ return {
       icon = "󰉫",
       hl_group = "markdownH1Delimiter",
       indent = 0,
+      line_background = true,
       render = "heading_marker",
       -- hl_fill = true,
     },
@@ -276,30 +292,35 @@ return {
       icon = "󰉬",
       hl_group = "markdownH2Delimiter",
       indent = 2,
+      line_background = true,
       render = "heading_marker"
     },
     atx_h3_marker = { -- Heading 3
       icon = "󰉭",
       hl_group = "markdownH3Delimiter",
       indent = 4,
+      line_background = true,
       render = "heading_marker"
     },
     atx_h4_marker = { -- Heading 4
       icon = "󰉮",
       hl_group = "markdownH4Delimiter",
       indent = 6,
+      line_background = true,
       render = "heading_marker"
     },
     atx_h5_marker = { -- Heading 5
       icon = "󰉯",
       hl_group = "markdownH5Delimiter",
       indent = 8,
+      line_background = true,
       render = "heading_marker"
     },
     atx_h6_marker = { -- Heading 6
       icon = "󰉰",
       hl_group = "markdownH6Delimiter",
       indent = 10,
+      line_background = true,
       render = "heading_marker"
     },
     tag = { -- Tag

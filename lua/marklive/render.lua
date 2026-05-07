@@ -163,6 +163,119 @@ local function codeblock_language_hl_group(lang)
   return 'MarkliveCodeblockLang_' .. suffix
 end
 
+local heading_bg_cache = {}
+
+local function normalize_hex_color(color)
+  if type(color) == 'number' then
+    return string.format('#%06x', color)
+  end
+
+  if type(color) ~= 'string' then
+    return nil
+  end
+
+  if color:sub(1, 1) ~= '#' then
+    color = '#' .. color
+  end
+
+  if color:match('^#%x%x%x%x%x%x$') then
+    return color
+  end
+
+  return nil
+end
+
+local function blend_hex_color(fg, bg, alpha)
+  local fg_hex = fg:gsub('#', '')
+  local bg_hex = bg:gsub('#', '')
+  local result = {}
+
+  for i = 1, 3 do
+    local start_idx = (i - 1) * 2 + 1
+    local fg_channel = tonumber(fg_hex:sub(start_idx, start_idx + 1), 16)
+    local bg_channel = tonumber(bg_hex:sub(start_idx, start_idx + 1), 16)
+    local channel = math.floor(fg_channel * alpha + bg_channel * (1 - alpha) + 0.5)
+    table.insert(result, string.format('%02x', channel))
+  end
+
+  return '#' .. table.concat(result, '')
+end
+
+local function get_normal_bg()
+  local normal_hl = vim.api.nvim_get_hl(0, { name = 'Normal', link = false })
+  local normal_bg = normalize_hex_color(normal_hl and normal_hl.bg)
+  if normal_bg then
+    return normal_bg
+  end
+
+  return vim.o.background == 'light' and '#ffffff' or '#1f1f28'
+end
+
+local function heading_line_bg_group(hl_group)
+  if not hl_group then
+    return nil
+  end
+
+  local hl_def = vim.api.nvim_get_hl(0, { name = hl_group, link = false })
+  local bg = normalize_hex_color(hl_def and hl_def.bg)
+  if not bg then
+    local fg = normalize_hex_color(hl_def and hl_def.fg)
+    if not fg then
+      return nil
+    end
+
+    local alpha = vim.o.background == 'light' and 0.12 or 0.18
+    bg = blend_hex_color(fg, get_normal_bg(), alpha)
+  end
+
+  local group = 'MarkliveHeadingLineBg_' .. hl_group:gsub('[^%w_]', '_')
+  if heading_bg_cache[group] ~= bg then
+    vim.api.nvim_set_hl(0, group, { bg = bg })
+    heading_bg_cache[group] = bg
+  end
+
+  return group
+end
+
+local function render_heading_line_background(rc, hl_group)
+  local line = rc.line
+    or vim.api.nvim_buf_get_lines(rc.bufnr, rc.start_row, rc.start_row + 1, false)[1]
+    or ''
+  local line_byte_len = #line
+  local line_width = vim.fn.strdisplaywidth(line)
+  local win_width = tonumber(rc.win_width) or vim.api.nvim_win_get_width(0)
+
+  vim.api.nvim_buf_set_extmark(rc.bufnr, rc.namespace, rc.start_row, 0, {
+    end_line = rc.start_row,
+    end_col = line_byte_len,
+    hl_group = hl_group,
+    priority = 0,
+  })
+
+  if win_width <= 0 then
+    return
+  end
+
+  local fill_width = 0
+  if line_width < win_width then
+    fill_width = win_width - line_width
+  else
+    local remainder = line_width % win_width
+    if remainder ~= 0 then
+      fill_width = win_width - remainder
+    end
+  end
+
+  if fill_width > 0 then
+    vim.api.nvim_buf_set_extmark(rc.bufnr, rc.namespace, rc.start_row, line_byte_len, {
+      virt_text = { { string.rep(' ', fill_width), hl_group } },
+      virt_text_pos = 'overlay',
+      hl_mode = 'combine',
+      priority = 0,
+    })
+  end
+end
+
 -- render.render_padding = function(namespace, icon_padding, padding_index, start_row, start_col, end_row, end_col, hl_group)
 --   -- The final construction is in the format of {{0, 0}, {0, 0}}, if icon_padding is a single number, it is converted to {{0, 0}}
 --   -- If it is two numbers {0, 0}, it is {{0,0}}, if it is already in the format of {{0,0}}, no processing is done
@@ -1060,10 +1173,24 @@ end
 -- 用于渲染 markdown 标题 marker
 ---@param rc table
 render.heading_marker = function(rc)
+  local render_config = rc.render_config or {}
+  local line_bg_group = nil
+  if render_config.line_background ~= false then
+    if type(render_config.line_background) == 'string' then
+      line_bg_group = render_config.line_background
+    else
+      line_bg_group = heading_line_bg_group(rc.hl_group)
+    end
+
+    if line_bg_group then
+      render_heading_line_background(rc, line_bg_group)
+    end
+  end
+
   local indent = tonumber(rc.indent) or 0
   if indent > 0 then
     vim.api.nvim_buf_set_extmark(rc.bufnr, rc.namespace, rc.start_row, rc.start_col, {
-      virt_text = { { string.rep(' ', indent), rc.hl_group } },
+      virt_text = { { string.rep(' ', indent), line_bg_group or rc.hl_group } },
       virt_text_pos = 'inline',
       hl_mode = 'combine',
       priority = 0,
