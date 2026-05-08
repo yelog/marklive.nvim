@@ -65,6 +65,7 @@ describe('code block language badge', function()
     assert.is_not_nil(details)
     assert.are.equal('overlay', details.virt_text_pos)
     assert.are_not.equal('right_align', details.virt_text_pos)
+    assert.are_not.equal(' ', text:sub(1, 1))
     assert.is_true(text:find('', 1, true) ~= nil)
   end)
 

@@ -1285,7 +1285,7 @@ render.code_block = function(rc)
 
     local icon = lang_style.icon or default_codeblock_language_style.icon
     local icon_text = icon ~= "" and icon .. " " or ""
-    local lang_label = " " .. icon_text .. lang .. " "
+    local lang_label = icon_text .. lang .. " "
     vim.api.nvim_buf_set_extmark(bufnr, namespace, start_row, 0, {
       virt_text = { { lang_label, lang_hl } },
       virt_text_pos = "overlay",
