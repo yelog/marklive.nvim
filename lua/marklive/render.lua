@@ -743,21 +743,69 @@ render._init_visible = function(namespace, config, query, regex_list)
   local tree = parser:parse()[1]
   local root = tree:root()
   local query_obj
+  local markdown_query = query
+  local italic_config = config.render.italic
+  local has_italic_query = italic_config
+    and italic_config.render == 'italic'
+    and type(italic_config.query) == 'string'
+  if has_italic_query then
+    -- Emphasis belongs to markdown_inline, so keep it out of the host query.
+    markdown_query = markdown_query:gsub(vim.pesc(italic_config.query), '')
+  end
   ok, err = pcall(function()
-    query_obj = ts.query.parse(ts_lang, query)
+    query_obj = ts.query.parse(ts_lang, markdown_query)
   end)
   if not ok or not query_obj then
     -- 解析 query 失败，尝试用 markdown 解析
     if ts_lang ~= "markdown" then
       ts_lang = "markdown"
       ok, err = pcall(function()
-        query_obj = ts.query.parse(ts_lang, query)
+        query_obj = ts.query.parse(ts_lang, markdown_query)
       end)
       if not ok or not query_obj then
         return
       end
     else
       return
+    end
+  end
+
+  if has_italic_query then
+    -- Limit inline parsing to Markdown inline nodes to exclude fenced code blocks.
+    local inline_parser
+    local inline_query
+    local inline_ranges = {}
+    ok = pcall(function()
+      inline_parser = ts.get_parser(bufnr, 'markdown_inline')
+      inline_query = ts.query.parse('markdown_inline', italic_config.query)
+    end)
+
+    if ok and inline_parser and inline_query then
+      local host_inline_query = ts.query.parse(ts_lang, '(inline) @inline')
+      for _, range in ipairs(visible_ranges) do
+        for _, node in host_inline_query:iter_captures(root, bufnr, range[1], range[2]) do
+          table.insert(inline_ranges, { node:range() })
+        end
+      end
+
+      local inline_tree = inline_parser:parse()[1]
+      local inline_root = inline_tree:root()
+      for _, range in ipairs(inline_ranges) do
+        for _, node in inline_query:iter_captures(inline_root, bufnr, range[1], range[3]) do
+          local start_row, start_col, end_row, end_col = node:range()
+          if not is_in_codeblock(bufnr, start_row) then
+            render.italic({
+              bufnr = bufnr,
+              namespace = namespace,
+              hl_group = italic_config.hl_group or 'italic',
+              start_row = start_row,
+              start_col = start_col,
+              end_row = end_row,
+              end_col = end_col,
+            })
+          end
+        end
+      end
     end
   end
 
@@ -922,6 +970,26 @@ render.list = function(rc)
     conceal = rc.icon,
     hl_group = rc.hl_group, -- use_name
     priority = 0,           -- To ignore conceal hl_group when focused
+  })
+end
+
+render.italic = function(rc)
+  vim.api.nvim_buf_set_extmark(rc.bufnr, rc.namespace, rc.start_row, rc.start_col, {
+    end_line = rc.start_row,
+    end_col = rc.start_col + 1,
+    conceal = '',
+    hl_group = rc.hl_group,
+  })
+  vim.api.nvim_buf_set_extmark(rc.bufnr, rc.namespace, rc.start_row, rc.start_col + 1, {
+    end_line = rc.end_row,
+    end_col = rc.end_col - 1,
+    hl_group = rc.hl_group,
+  })
+  vim.api.nvim_buf_set_extmark(rc.bufnr, rc.namespace, rc.end_row, rc.end_col - 1, {
+    end_line = rc.end_row,
+    end_col = rc.end_col,
+    conceal = '',
+    hl_group = rc.hl_group,
   })
 end
 

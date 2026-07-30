@@ -196,8 +196,8 @@ return {
     },
     italic = { -- Italic
       hl_group = "markdownItalic",
-      -- Use lookbehind and lookahead to ensure _ is not surrounded by letters
-      regex = "[^%a](_)[^_%s][^_]*(_)[^%a]",
+      query = "(emphasis) @italic",
+      render = 'italic',
     },
     bolder = { -- bolder
       icon = '',

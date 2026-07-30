@@ -53,6 +53,35 @@ local function find_language_label(namespace, lang)
   return nil, ''
 end
 
+local function render_markdown(lines)
+  local marklive = require('marklive')
+  local namespace = marklive.namespace
+  vim.api.nvim_buf_clear_namespace(0, namespace, 0, -1)
+  vim.api.nvim_buf_set_lines(0, 0, -1, false, lines)
+  vim.bo.filetype = 'markdown'
+  marklive.setup({ render_delay = 0 })
+  marklive.render()
+  vim.wait(50)
+  return namespace
+end
+
+local function find_italic_extmarks(namespace)
+  local italic_extmarks = {}
+  local extmarks = vim.api.nvim_buf_get_extmarks(0, namespace, 0, -1, { details = true })
+  for _, extmark in ipairs(extmarks) do
+    local details = extmark[4]
+    if details and details.hl_group == 'markdownItalic' and details.conceal == nil then
+      table.insert(italic_extmarks, {
+        row = extmark[2],
+        col = extmark[3],
+        end_col = details.end_col,
+      })
+    end
+  end
+
+  return italic_extmarks
+end
+
 describe('code block language badge', function()
   before_each(function()
     vim.cmd('enew!')
@@ -262,5 +291,41 @@ describe('table markdown cell styling', function()
     end
 
     assert.are.same({ 'Content4', 'Content5' }, strike_text)
+  end)
+end)
+
+describe('markdown italic rendering', function()
+  before_each(function()
+    vim.cmd('enew!')
+  end)
+
+  it('highlights only italic content for underscore and asterisk emphasis', function()
+    local namespace = render_markdown({
+      '_italic_',
+      '*italic*',
+      'prefix _italic_ suffix',
+      'prefix *italic* suffix',
+    })
+
+    assert.are.same({
+      { row = 0, col = 1, end_col = 7 },
+      { row = 1, col = 1, end_col = 7 },
+      { row = 2, col = 8, end_col = 14 },
+      { row = 3, col = 8, end_col = 14 },
+    }, find_italic_extmarks(namespace))
+  end)
+
+  it('does not highlight text that is not Markdown emphasis', function()
+    local namespace = render_markdown({
+      '`_not italic_`',
+      '`*not italic*`',
+      '```lua',
+      '_not italic_',
+      '*not italic*',
+      '```',
+      'foo_bar_baz',
+    })
+
+    assert.are.same({}, find_italic_extmarks(namespace))
   end)
 end)
