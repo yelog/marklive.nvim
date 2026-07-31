@@ -1,6 +1,7 @@
 local utils = require('marklive.utils')
 local render = {}
 local has_virt_text_repeat_linebreak = vim.fn.has('nvim-0.10') == 1
+local table_highlights_initialized = false
 
 local function ensure_showbreak_padding(width)
   if width <= 0 or not vim.wo.wrap then
@@ -91,18 +92,18 @@ local function is_pipe_table_line(line)
   return pipe_count >= 2
 end
 
--- 判断某一行是否在代码块内
-local function is_in_codeblock(bufnr, lnum)
-  -- bufnr: buffer number
-  -- lnum: 0-based line number
-  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, lnum + 1, false)
-  local codeblock_count = 0
-  for _, line in ipairs(lines) do
-    if line:match("^%s*```") then
-      codeblock_count = codeblock_count + 1
+-- Build fence state once per render instead of rescanning the buffer for every match.
+local function codeblock_rows(bufnr)
+  local rows = {}
+  local fence_count = 0
+  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
+  for row, line in ipairs(lines) do
+    if line:match('^%s*```') then
+      fence_count = fence_count + 1
     end
+    rows[row - 1] = fence_count % 2 == 1
   end
-  return codeblock_count % 2 == 1
+  return rows
 end
 
 local codeblock_language_aliases = {
@@ -648,29 +649,47 @@ render.block_quote = function(rc)
 end
 
 -- 节流渲染实现
-local render_timer = nil
-render.throttle_init = function(namespace, config, query, regex_list)
-  if render_timer then
-    render_timer:stop()
-    render_timer:close()
-    render_timer = nil
+local render_timers = {}
+local query_cache = {}
+
+local function parse_query(lang, source)
+  local key = lang .. '\n' .. source
+  local cached = query_cache[key]
+  if cached ~= nil then
+    return cached or nil
   end
+
+  local ok, query_obj = pcall(vim.treesitter.query.parse, lang, source)
+  query_cache[key] = ok and query_obj or false
+  return query_cache[key] or nil
+end
+
+render.throttle_init = function(namespace, config, query, regex_list)
+  local bufnr = vim.api.nvim_get_current_buf()
+  local timer = render_timers[bufnr]
+  if not timer then
+    timer = vim.loop.new_timer()
+    render_timers[bufnr] = timer
+  end
+  timer:stop()
+
   local delay = 10
   if config and config.render_delay then
     delay = config.render_delay
   end
-  render_timer = vim.loop.new_timer()
-  render_timer:start(delay, 0, vim.schedule_wrap(function()
-    render._init_visible(namespace, config, query, regex_list)
+  timer:start(delay, 0, vim.schedule_wrap(function()
+    render._init_visible(bufnr, namespace, config, query, regex_list)
   end))
 end
 
 -- 只渲染可见区域
-render._init_visible = function(namespace, config, query, regex_list)
-  vim.api.nvim_buf_clear_namespace(0, namespace, 0, -1)
+render._init_visible = function(bufnr, namespace, config, query, regex_list)
+  if not vim.api.nvim_buf_is_valid(bufnr) then
+    return
+  end
 
-  local filetype = vim.bo.filetype
-  local valid_filetypes = require('marklive').config.filetype
+  local filetype = vim.bo[bufnr].filetype
+  local valid_filetypes = config.filetype
   if type(valid_filetypes) == "string" then
     valid_filetypes = { valid_filetypes }
   end
@@ -689,8 +708,6 @@ render._init_visible = function(namespace, config, query, regex_list)
     --   tostring(filetype) .. "，配置 filetype 列表: " .. vim.inspect(valid_filetypes))
     return
   end
-  local bufnr = vim.api.nvim_get_current_buf()
-
   -- 收集所有显示该 buffer 的窗口的可视行范围 (0-based start, 1-based end)，并合并
   local visible_ranges = {}
   local max_width = 0
@@ -721,6 +738,10 @@ render._init_visible = function(namespace, config, query, regex_list)
   visible_ranges = merged_ranges
   local width = max_width
 
+  for _, range in ipairs(visible_ranges) do
+    vim.api.nvim_buf_clear_namespace(bufnr, namespace, range[1], range[2])
+  end
+
   local ts = vim.treesitter
   local parser
   local ts_lang = filetype
@@ -750,23 +771,21 @@ render._init_visible = function(namespace, config, query, regex_list)
     -- Emphasis belongs to markdown_inline, so keep it out of the host query.
     markdown_query = markdown_query:gsub(vim.pesc(italic_config.query), '')
   end
-  ok, err = pcall(function()
-    query_obj = ts.query.parse(ts_lang, markdown_query)
-  end)
-  if not ok or not query_obj then
+  query_obj = parse_query(ts_lang, markdown_query)
+  if not query_obj then
     -- 解析 query 失败，尝试用 markdown 解析
     if ts_lang ~= "markdown" then
       ts_lang = "markdown"
-      ok, err = pcall(function()
-        query_obj = ts.query.parse(ts_lang, markdown_query)
-      end)
-      if not ok or not query_obj then
+      query_obj = parse_query(ts_lang, markdown_query)
+      if not query_obj then
         return
       end
     else
       return
     end
   end
+
+  local fenced_rows = codeblock_rows(bufnr)
 
   if has_italic_query then
     -- Limit inline parsing to Markdown inline nodes to exclude fenced code blocks.
@@ -775,14 +794,16 @@ render._init_visible = function(namespace, config, query, regex_list)
     local inline_ranges = {}
     ok = pcall(function()
       inline_parser = ts.get_parser(bufnr, 'markdown_inline')
-      inline_query = ts.query.parse('markdown_inline', italic_config.query)
+      inline_query = parse_query('markdown_inline', italic_config.query)
     end)
 
     if ok and inline_parser and inline_query then
-      local host_inline_query = ts.query.parse(ts_lang, '(inline) @inline')
-      for _, range in ipairs(visible_ranges) do
-        for _, node in host_inline_query:iter_captures(root, bufnr, range[1], range[2]) do
-          table.insert(inline_ranges, { node:range() })
+      local host_inline_query = parse_query(ts_lang, '(inline) @inline')
+      if host_inline_query then
+        for _, range in ipairs(visible_ranges) do
+          for _, node in host_inline_query:iter_captures(root, bufnr, range[1], range[2]) do
+            table.insert(inline_ranges, { node:range() })
+          end
         end
       end
 
@@ -791,7 +812,7 @@ render._init_visible = function(namespace, config, query, regex_list)
       for _, range in ipairs(inline_ranges) do
         for _, node in inline_query:iter_captures(inline_root, bufnr, range[1], range[3]) do
           local start_row, start_col, end_row, end_col = node:range()
-          if not is_in_codeblock(bufnr, start_row) then
+          if not fenced_rows[start_row] then
             render.italic({
               bufnr = bufnr,
               namespace = namespace,
@@ -821,7 +842,7 @@ render._init_visible = function(namespace, config, query, regex_list)
       local icon_padding = config.render[name].icon_padding
 
       -- 多窗口可视区域合并后渲染；保持原有代码块跳过逻辑
-      if name ~= "code_block" and is_in_codeblock(bufnr, start_row) then
+      if name ~= "code_block" and fenced_rows[start_row] then
         goto continue_query
       end
 
@@ -912,11 +933,11 @@ render._init_visible = function(namespace, config, query, regex_list)
     for _, range in ipairs(visible_ranges) do
       local r_start = range[1]
       local r_end = range[2]
-      local lines = vim.api.nvim_buf_get_lines(0, r_start, r_end, false)
+        local lines = vim.api.nvim_buf_get_lines(bufnr, r_start, r_end, false)
       local matches = utils.find_matches_with_groups(lines, regex)
       for _, match in ipairs(matches) do
         local lnum = r_start + match.lnum
-        if is_in_codeblock(bufnr, lnum) then
+        if fenced_rows[lnum] then
           goto continue_regex
         end
         if #match.groups == 0 then
@@ -998,9 +1019,11 @@ render.table = function(rc)
   local border_hl = "MarkliveTableBorder"
   local header_hl = "MarkliveTableHeader"
 
-  -- 定义高亮（只需定义一次即可）
-  vim.api.nvim_set_hl(0, border_hl, { fg = "#ef9020" })
-  vim.api.nvim_set_hl(0, header_hl, { fg = "#ef9020", bold = true })
+  if not table_highlights_initialized then
+    vim.api.nvim_set_hl(0, border_hl, { fg = "#ef9020" })
+    vim.api.nvim_set_hl(0, header_hl, { fg = "#ef9020", bold = true })
+    table_highlights_initialized = true
+  end
 
   -- border 字符定义
   local border = {
@@ -1696,17 +1719,6 @@ vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
 
 vim.api.nvim_create_autocmd({ "BufEnter" }, {
   group = vim.api.nvim_create_augroup("MarkliveTableBufEnter", { clear = true }),
-  callback = function()
-    if render.last_namespace and render.last_config and render.last_query and render.last_regex_list then
-      require('marklive.render').init(render.last_namespace, render.last_config, render.last_query,
-        render.last_regex_list)
-    end
-  end,
-})
-
--- 新增：监听窗口滚动事件，滚动时触发渲染
-vim.api.nvim_create_autocmd({ "WinScrolled" }, {
-  group = vim.api.nvim_create_augroup("MarkliveTableWinScrolled", { clear = true }),
   callback = function()
     if render.last_namespace and render.last_config and render.last_query and render.last_regex_list then
       require('marklive.render').init(render.last_namespace, render.last_config, render.last_query,

@@ -21,6 +21,24 @@ M.apply_highlights = function()
   utils.applyHighlight(M.config.highlight_config or {})
 end
 
+M.is_renderable_buffer = function(bufnr)
+  if not M.config.enable or not vim.api.nvim_buf_is_valid(bufnr) then
+    return false
+  end
+
+  local filetype = vim.bo[bufnr].filetype:lower()
+  local filetypes = M.config.filetype
+  if type(filetypes) == 'string' then
+    filetypes = { filetypes }
+  end
+  for _, candidate in ipairs(filetypes) do
+    if filetype == candidate:lower() then
+      return true
+    end
+  end
+  return false
+end
+
 M.setup = function(config)
   -- merge config
   config = config or {}
@@ -69,7 +87,9 @@ end
 
 -- 使用节流和可见区域渲染
 M.render = function()
-  M.apply_highlights()
+  if not M.is_renderable_buffer(vim.api.nvim_get_current_buf()) then
+    return
+  end
   render.init(M.namespace, M.config, query, regex_list)
 end
 
@@ -82,22 +102,29 @@ M.enable = function()
   -- set highlight
   utils.setHighlight(M.config.highlight_config or {}, vim.o.filetype)
 
-  vim.cmd [[
-        augroup Marklive
-        autocmd!
-        autocmd FileChangedShellPost,Syntax,ColorScheme,TextChanged,InsertLeave,TextChangedI * lua require('marklive').render()
-        autocmd CursorMoved,CursorMovedI * lua require('marklive').render()
-        " 当折叠被打开或关闭时，可视区域发生变化但光标可能未移动，需要重新渲染
-        " WinScrolled: 部分情况下展开折叠会引起窗口滚动（顶部/底部补行）
-        autocmd WinScrolled * lua require('marklive').render()
-        " 仅在存在 FoldChanged 事件 (NVIM 0.10+) 时注册
-        if exists('##FoldChanged')
-          autocmd FoldChanged * lua require('marklive').render()
-        endif
-        " 兜底：在没有 FoldChanged 且不滚动/不移动光标的折叠场景，用 CursorHold 触发（受 updatetime 影响）
-        autocmd CursorHold,CursorHoldI * lua require('marklive').render()
-        augroup END
-    ]]
+  local group = vim.api.nvim_create_augroup('Marklive', { clear = true })
+  local render_events = {
+    'FileChangedShellPost', 'Syntax', 'TextChanged', 'InsertLeave', 'TextChangedI',
+    'CursorMoved', 'CursorMovedI', 'WinScrolled',
+  }
+  if vim.fn.exists('##FoldChanged') == 1 then
+    table.insert(render_events, 'FoldChanged')
+  end
+  vim.api.nvim_create_autocmd(render_events, {
+    group = group,
+    callback = function(args)
+      if M.is_renderable_buffer(args.buf) then
+        M.render()
+      end
+    end,
+  })
+  vim.api.nvim_create_autocmd('ColorScheme', {
+    group = group,
+    callback = function()
+      M.apply_highlights()
+      M.render()
+    end,
+  })
 end
 
 M.disable = function()

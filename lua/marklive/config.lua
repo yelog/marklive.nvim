@@ -334,7 +334,7 @@ return {
       regex = " (@)[^@ ]+",
     }
   },
-  render_delay = 10, -- ms
+  render_delay = 60, -- ms
   action = {
     task = {
       -- 层级关系
