@@ -215,6 +215,55 @@ describe('heading marker indentation', function()
   end)
 end)
 
+describe('blockquote callouts', function()
+  before_each(function()
+    vim.cmd('enew!')
+    vim.api.nvim_set_hl(0, 'MarkliveTestBlockquote', { bg = '#101010' })
+    vim.api.nvim_set_hl(0, 'MarkliveTestCallout', { bg = '#202020' })
+  end)
+
+  it('preserves callout conceals and title highlighting', function()
+    local namespace = vim.api.nvim_create_namespace('marklive_blockquote_callout_test')
+    local line = '> [!NOTE] Title'
+    vim.api.nvim_buf_set_lines(0, 0, -1, false, { line })
+
+    render.block_quote({
+      bufnr = 0,
+      namespace = namespace,
+      hl_group = 'MarkliveTestBlockquote',
+      icon = '▎',
+      start_row = 0,
+      end_row = 1,
+      config = {
+        render = {
+          block_quote = {
+            callout = {
+              note = { icon = '!', hl_group = 'MarkliveTestCallout' },
+            },
+          },
+        },
+      },
+    })
+
+    local extmarks = vim.api.nvim_buf_get_extmarks(0, namespace, 0, -1, { details = true })
+    local found_icon = false
+    local found_hidden_key = false
+    local found_title = false
+    for _, extmark in ipairs(extmarks) do
+      local details = extmark[4]
+      found_icon = found_icon or details.conceal == '!'
+      found_hidden_key = found_hidden_key
+        or (details.conceal == '' and extmark[3] == 4 and details.end_col == 8)
+      found_title = found_title
+        or (details.hl_group == 'MarkliveTestCallout' and extmark[3] == 9 and details.end_col == #line)
+    end
+
+    assert.is_true(found_icon)
+    assert.is_true(found_hidden_key)
+    assert.is_true(found_title)
+  end)
+end)
+
 describe('table markdown cell styling', function()
   local function render_table(lines)
     local namespace = vim.api.nvim_create_namespace('marklive_table_style_test')

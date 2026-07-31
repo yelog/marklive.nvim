@@ -385,9 +385,19 @@ render.block_quote = function(rc)
   local lines = vim.api.nvim_buf_get_lines(bufnr, start_row, end_row, false)
   if #lines == 0 then return end
 
-  -- 获取高亮组的 fg 和 bg
-  local hl_def = vim.api.nvim_get_hl(0, { name = hl_group, link = false })
-  local fg = hl_def and hl_def.fg and string.format("#%06x", hl_def.fg) or nil
+  -- Extmarks in a block often share highlight groups; resolve each group only once.
+  local highlights = {}
+  local function get_highlight(group)
+    if not group then
+      return nil
+    end
+    if highlights[group] == nil then
+      highlights[group] = vim.api.nvim_get_hl(0, { name = group, link = false }) or false
+    end
+    return highlights[group] or nil
+  end
+
+  local hl_def = get_highlight(hl_group)
   local bg = hl_def and hl_def.bg and string.format("#%06x", hl_def.bg) or nil
 
   -- 判断首行是否为 callout
@@ -395,7 +405,6 @@ render.block_quote = function(rc)
   local callout_hl_group = nil
   local callout_icon = nil
   local callout_key = nil
-  local callout_fg = nil
   local callout_match_content = nil
   if config and config.render and config.render.block_quote and config.render.block_quote.callout then
     local first_line = lines[1]
@@ -406,11 +415,6 @@ render.block_quote = function(rc)
         if string.lower(k) == callout_key then
           callout_hl_group = v.hl_group
           callout_icon = v.icon
-          -- 获取高亮组的 fg
-          if v.hl_group then
-            local hl_def = vim.api.nvim_get_hl(0, { name = v.hl_group, link = false })
-            callout_fg = hl_def and hl_def.fg and string.format("#%06x", hl_def.fg) or nil
-          end
           break
         end
       end
@@ -421,7 +425,7 @@ render.block_quote = function(rc)
   local use_hl_group = callout_hl_group or hl_group
   local use_bg = nil
   if callout_hl_group then
-    local callout_hl = vim.api.nvim_get_hl(0, { name = callout_hl_group, link = false })
+    local callout_hl = get_highlight(callout_hl_group)
     use_bg = callout_hl and callout_hl.bg and string.format("#%06x", callout_hl.bg) or nil
   end
   if not use_bg then
@@ -475,18 +479,15 @@ render.block_quote = function(rc)
           -- 4. conceal key（如 note），每个字符单独conceal，首字母大写，其余小写
           local key_str = line:match("%[!([%w_%-]+)%]")
           if key_str then
-            local key_disp = key_str:sub(1,1):upper() .. key_str:sub(2):lower()
-            for idx = 1, #key_str do
-              local c = key_str:sub(idx, idx)
-              local disp_c = idx == 1 and key_disp:sub(1,1) or key_disp:sub(idx,idx)
-              -- 找到字符在line中的位置
-              local key_start = line:find("%[!"..key_str.."%]")
-              if key_start then
+            local key_start = line:find('[!' .. key_str .. ']', 1, true)
+            if key_start then
+              for idx = 1, #key_str do
                 local char_col = key_start + 1 + idx -- [! 占2位
-                vim.api.nvim_buf_set_extmark(bufnr, namespace, lnum, char_col-1, {
+                local char = key_str:sub(idx, idx)
+                vim.api.nvim_buf_set_extmark(bufnr, namespace, lnum, char_col - 1, {
                   end_line = lnum,
                   end_col = char_col,
-                  conceal = disp_c,
+                  conceal = idx == 1 and char:upper() or char:lower(),
                   hl_group = callout_hl_group,
                   priority = 0,
                 })
@@ -536,20 +537,15 @@ render.block_quote = function(rc)
           -- 3. conceal key（如 note），每个字符单独conceal，首字母大写，其余小写
           local key_str = line:match("%[!([%w_%-]+)%]")
           if key_str then
-            local key_disp = key_str:sub(1,1):upper() .. key_str:sub(2):lower()
-            for idx = 1, #key_str do
-              local disp_c = idx == 1 and key_disp:sub(1,1) or key_disp:sub(idx,idx)
-              local key_start = line:find("%[!"..key_str.."%]")
-              if key_start then
-                local char_col = key_start + 1 + idx -- [! 占2位
-                vim.api.nvim_buf_set_extmark(bufnr, namespace, lnum, char_col-1, {
-                  end_line = lnum,
-                  end_col = char_col,
-                  conceal = "",
-                  hl_group = callout_hl_group,
-                  priority = 0,
-                })
-              end
+            local key_start = line:find('[!' .. key_str .. ']', 1, true)
+            if key_start then
+              vim.api.nvim_buf_set_extmark(bufnr, namespace, lnum, key_start + 1, {
+                end_line = lnum,
+                end_col = key_start + #key_str + 1,
+                conceal = '',
+                hl_group = callout_hl_group,
+                priority = 0,
+              })
             end
           end
           -- 4. conceal ] 替换为 ''
@@ -593,100 +589,96 @@ render.block_quote = function(rc)
       set_block_quote_marker(bufnr, namespace, lnum, gt_end, line, icon, use_hl_group, callout_key ~= nil)
     end
 
-    -- 只为没有背景色的区域设置 block_quote 的背景色
-    local bg_to_use = use_bg or bg
-    if bg_to_use then
-      local line_content = vim.api.nvim_buf_get_lines(bufnr, lnum, lnum + 1, false)[1] or ""
-      local line_byte_len = string.len(line_content)
-      local win_width = vim.api.nvim_win_get_width(0)
-      local line_len = vim.fn.strdisplaywidth(line_content)
+  end
 
-      -- 1. 检查当前行是否有高亮覆盖（如 bold/code/inline 等），只为没有 bg 的区域设置 block_quote 的 bg
-      -- 方案：遍历当前 buffer 的 extmarks，找出有 bg 的区间，补全无 bg 区间
-      local extmarks = vim.api.nvim_buf_get_extmarks(bufnr, -1, {lnum, 0}, {lnum, -1}, {details=true})
-      local bg_ranges = {}
-      for _, ext in ipairs(extmarks) do
-        local det = ext[4]
-        if det and det.hl_group then
-          local hl = vim.api.nvim_get_hl(0, { name = det.hl_group, link = false })
-          if hl and hl.bg then
-            local s = det.col or 0
-            local e = det.end_col or ((det.col and det.col + 1) or 0)
-            if s ~= e then
-              table.insert(bg_ranges, {s, e})
-            end
-          end
+  -- Scan the block once after marker extmarks have been added, preserving the
+  -- background exclusion behavior without enumerating every namespace per line.
+  local bg_to_use = use_bg or bg
+  if not bg_to_use then
+    return
+  end
+
+  local extmarks_by_line = {}
+  local extmarks = vim.api.nvim_buf_get_extmarks(bufnr, -1, { start_row, 0 }, { end_row, 0 },
+                                                  { details = true })
+  for _, extmark in ipairs(extmarks) do
+    local row = extmark[2]
+    extmarks_by_line[row] = extmarks_by_line[row] or {}
+    table.insert(extmarks_by_line[row], extmark)
+  end
+
+  local group_name = 'MarkliveBlockquoteBgOnly' .. (callout_key and '_' .. callout_key or '')
+  pcall(vim.api.nvim_set_hl, 0, group_name, { bg = tonumber(bg_to_use:sub(2), 16) })
+
+  local win_width = vim.api.nvim_win_get_width(0)
+  for i, line in ipairs(lines) do
+    local lnum = start_row + i - 1
+    local line_byte_len = #line
+    local bg_ranges = {}
+    for _, extmark in ipairs(extmarks_by_line[lnum] or {}) do
+      local details = extmark[4]
+      local hl = details and get_highlight(details.hl_group)
+      if hl and hl.bg then
+        local start_col = extmark[3]
+        local end_col = details.end_col or start_col + 1
+        if start_col ~= end_col then
+          table.insert(bg_ranges, { start_col, end_col })
         end
       end
-      -- 合并重叠区间
-      table.sort(bg_ranges, function(a, b) return a[1] < b[1] end)
-      local merged = {}
-      for _, r in ipairs(bg_ranges) do
-        if #merged == 0 or merged[#merged][2] < r[1] then
-          table.insert(merged, {r[1], r[2]})
-        else
-          merged[#merged][2] = math.max(merged[#merged][2], r[2])
-        end
-      end
+    end
 
-      -- 2. 为没有 bg 的区间设置 block_quote 的 bg（只设置 bg，不设置 fg，避免覆盖原有文字颜色）
-      local group_name = "MarkliveBlockquoteBgOnly"
-      if callout_key then
-        group_name = "MarkliveBlockquoteBgOnly_" .. callout_key
+    table.sort(bg_ranges, function(a, b) return a[1] < b[1] end)
+    local merged = {}
+    for _, range in ipairs(bg_ranges) do
+      if #merged == 0 or merged[#merged][2] < range[1] then
+        table.insert(merged, { range[1], range[2] })
+      else
+        merged[#merged][2] = math.max(merged[#merged][2], range[2])
       end
-      -- 动态注册只带 bg 的高亮组
-      if bg_to_use then
-        local ok = pcall(function()
-          vim.api.nvim_set_hl(0, group_name, { bg = tonumber(bg_to_use:sub(2), 16) })
-        end)
-      end
+    end
 
-      local last = 0
-      -- 修复：callout 首行第一个空格的背景色问题
-      -- 如果是 callout 且当前行为首行，强制 last=0，merged 为空，直接整行都用 callout 的 bg
-      if callout_key and i == 1 then
-        merged = {}
-      end
-      for _, r in ipairs(merged) do
-        if last < r[1] then
-          vim.api.nvim_buf_set_extmark(bufnr, namespace, lnum, last, {
-            end_line = lnum,
-            end_col = r[1],
-            hl_group = group_name,
-            hl_mode = "combine",
-          })
-        end
-        last = r[2]
-      end
-      if last < line_byte_len then
+    -- Callout headers intentionally receive one uninterrupted background.
+    if callout_key and i == 1 then
+      merged = {}
+    end
+
+    local last = 0
+    for _, range in ipairs(merged) do
+      if last < range[1] then
         vim.api.nvim_buf_set_extmark(bufnr, namespace, lnum, last, {
           end_line = lnum,
-          end_col = line_byte_len,
+          end_col = range[1],
           hl_group = group_name,
-          hl_mode = "combine",
+          hl_mode = 'combine',
         })
       end
+      last = range[2]
+    end
+    if last < line_byte_len then
+      vim.api.nvim_buf_set_extmark(bufnr, namespace, lnum, last, {
+        end_line = lnum,
+        end_col = line_byte_len,
+        hl_group = group_name,
+        hl_mode = 'combine',
+      })
+    end
 
-      -- 3. 如果内容行宽度小于窗口宽度，补全背景色到整行
-      --    如果内容行超出窗口宽度（wrap 软折行），则为最后一个显示行的剩余列补齐背景色
-      if line_len < win_width then
-        vim.api.nvim_buf_set_extmark(bufnr, namespace, lnum, line_byte_len, {
-          virt_text = { { string.rep(" ", win_width - line_len), group_name } },
-          virt_text_pos = "overlay",
-          hl_mode = "combine",
-        })
-      else
-        -- 软折行：line_len >= win_width
-        -- 计算最后一段显示行的剩余列数；若刚好整除则无需补齐
-        local remainder = line_len % win_width
-        if remainder ~= 0 then
-          vim.api.nvim_buf_set_extmark(bufnr, namespace, lnum, line_byte_len, {
-            virt_text = { { string.rep(" ", win_width - remainder), group_name } },
-            virt_text_pos = "overlay",
-            hl_mode = "combine",
-          })
-        end
+    local line_len = vim.fn.strdisplaywidth(line)
+    local fill_width = 0
+    if line_len < win_width then
+      fill_width = win_width - line_len
+    else
+      local remainder = line_len % win_width
+      if remainder ~= 0 then
+        fill_width = win_width - remainder
       end
+    end
+    if fill_width > 0 then
+      vim.api.nvim_buf_set_extmark(bufnr, namespace, lnum, line_byte_len, {
+        virt_text = { { string.rep(' ', fill_width), group_name } },
+        virt_text_pos = 'overlay',
+        hl_mode = 'combine',
+      })
     end
   end
 end
