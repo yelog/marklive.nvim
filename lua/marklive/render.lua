@@ -229,10 +229,8 @@ local function heading_line_bg_group(hl_group)
   end
 
   local group = 'MarkliveHeadingLineBg_' .. hl_group:gsub('[^%w_]', '_')
-  if heading_bg_cache[group] ~= bg then
-    vim.api.nvim_set_hl(0, group, { bg = bg })
-    heading_bg_cache[group] = bg
-  end
+  vim.api.nvim_set_hl(0, group, { bg = bg })
+  heading_bg_cache[group] = bg
 
   return group
 end

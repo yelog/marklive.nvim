@@ -11,6 +11,16 @@ local regex_list = {}
 M.namespace = vim.api.nvim_create_namespace "marklive_namespace"
 M.config = default_config
 
+M.apply_highlights = function()
+  for name, renderConfig in pairs(M.config.render) do
+    if renderConfig.highlight ~= nil then
+      vim.api.nvim_set_hl(0, name, renderConfig.highlight)
+    end
+  end
+
+  utils.applyHighlight(M.config.highlight_config or {})
+end
+
 M.setup = function(config)
   -- merge config
   config = config or {}
@@ -33,19 +43,7 @@ M.setup = function(config)
   regex_list = generate_result.regex_list
 
   -- set item highlight
-  for name, renderConfig in pairs(M.config.render) do
-    if renderConfig.highlight ~= nil then
-      vim.api.nvim_set_hl(0, name, renderConfig.highlight)
-    end
-  end
-
-  if M.config.highlight_config then
-    for name, config in pairs(M.config.highlight_config) do
-      if config.highlight ~= nil then
-        vim.api.nvim_set_hl(0, name, config.highlight)
-      end
-    end
-  end
+  M.apply_highlights()
 
   -- conceal config
   vim.wo.conceallevel = 2
@@ -71,6 +69,7 @@ end
 
 -- 使用节流和可见区域渲染
 M.render = function()
+  M.apply_highlights()
   render.init(M.namespace, M.config, query, regex_list)
 end
 
@@ -86,7 +85,7 @@ M.enable = function()
   vim.cmd [[
         augroup Marklive
         autocmd!
-        autocmd FileChangedShellPost,Syntax,TextChanged,InsertLeave,TextChangedI * lua require('marklive').render()
+        autocmd FileChangedShellPost,Syntax,ColorScheme,TextChanged,InsertLeave,TextChangedI * lua require('marklive').render()
         autocmd CursorMoved,CursorMovedI * lua require('marklive').render()
         " 当折叠被打开或关闭时，可视区域发生变化但光标可能未移动，需要重新渲染
         " WinScrolled: 部分情况下展开折叠会引起窗口滚动（顶部/底部补行）

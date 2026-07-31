@@ -137,7 +137,7 @@ return {
       after_highlight = { fg = "#939393", strikethrough = true }
     },
     task_list_marker_indeterminate = { -- Task list marker indeterminate
-      icon = '󰡖',
+      icon = '◐',
       highlight = {
         fg = '#E9AD5B',
       },

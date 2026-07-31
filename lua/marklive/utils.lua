@@ -142,44 +142,86 @@ end
 
 utils.original_highlights = {}
 utils.highlight_configs = {}
+utils.match_ids = {}
 
 local augroup = vim.api.nvim_create_augroup("MarkliveHighlightGroup", { clear = true })
+
+local function match_exists(match_id)
+  for _, match in ipairs(vim.fn.getmatches()) do
+    if match.id == match_id then
+      return true
+    end
+  end
+
+  return false
+end
+
+local function filetype_key(filetype)
+  if type(filetype) == 'table' then
+    return table.concat(filetype, ',')
+  end
+
+  return tostring(filetype)
+end
+
+utils.applyHighlight = function(highlight_config)
+  if highlight_config == nil then
+    return
+  end
+
+  local winid = vim.api.nvim_get_current_win()
+  utils.match_ids[winid] = utils.match_ids[winid] or {}
+
+  for name, config in pairs(highlight_config) do
+    if config ~= nil then
+      if config.highlight ~= nil then
+        vim.api.nvim_set_hl(0, name, config.highlight)
+      end
+      if config.matchadd ~= nil then
+        local match_key = name .. '\n' .. config.matchadd
+        local match_id = utils.match_ids[winid][match_key]
+        if match_id == nil or not match_exists(match_id) then
+          utils.match_ids[winid][match_key] = vim.fn.matchadd(name, config.matchadd)
+        end
+      end
+    end
+  end
+end
 
 utils.setHighlight = function(highlight_config, filetype)
   if highlight_config == nil or filetype == nil then
     return
   end
 
-
   -- 保存原有的 highlight 配置
-  utils.original_highlights[filetype] = {}
+  local key = filetype_key(filetype)
+  utils.original_highlights[key] = {}
 
   for name, config in pairs(highlight_config) do
     if config ~= nil and config.highlight ~= nil then
       -- 获取当前 highlight 的配置
       local original_config = vim.api.nvim_get_hl(0, { name = name, link = false, create = false })
       -- 保存原有的配置，如果原有配置为空，保存一个空表
-      utils.original_highlights[filetype][name] = original_config or {}
+      utils.original_highlights[key][name] = original_config or {}
     end
   end
 
   -- 保存当前的 highlight 配置
-  utils.highlight_configs[filetype] = highlight_config
+  utils.highlight_configs[key] = highlight_config
+  utils.applyHighlight(highlight_config)
 
-  vim.api.nvim_create_autocmd("FileType", {
+  vim.api.nvim_create_autocmd({ "FileType", "Syntax" }, {
     group = augroup,
     pattern = filetype,
     callback = function()
-      for name, config in pairs(highlight_config) do
-        if config ~= nil then
-          if config.highlight ~= nil then
-            vim.api.nvim_set_hl(0, name, config.highlight)
-          end
-          if config.matchadd ~= nil then
-            vim.fn.matchadd(name, config.matchadd)
-          end
-        end
-      end
+      utils.applyHighlight(highlight_config)
+    end
+  })
+  vim.api.nvim_create_autocmd("ColorScheme", {
+    group = augroup,
+    pattern = "*",
+    callback = function()
+      utils.applyHighlight(highlight_config)
     end
   })
 end
@@ -187,15 +229,16 @@ end
 
 -- todo 待解决: 清除后, 再次设置就会失败的问题
 utils.clearHighlight = function(filetype)
-  if filetype == nil or utils.highlight_configs[filetype] == nil then
+  local key = filetype_key(filetype)
+  if filetype == nil or utils.highlight_configs[key] == nil then
     return
   end
 
-  local highlight_config = utils.highlight_configs[filetype]
+  local highlight_config = utils.highlight_configs[key]
 
   for name, _ in pairs(highlight_config) do
     -- 恢复原有的 highlight 配置
-    local original_config = utils.original_highlights[filetype] and utils.original_highlights[filetype][name]
+    local original_config = utils.original_highlights[key] and utils.original_highlights[key][name]
 
     if original_config then
       -- 确保配置是有效的 Lua 表
@@ -213,8 +256,14 @@ utils.clearHighlight = function(filetype)
   end
 
   -- 清除配置信息
-  utils.highlight_configs[filetype] = nil
-  utils.original_highlights[filetype] = nil
+  utils.highlight_configs[key] = nil
+  utils.original_highlights[key] = nil
+  for winid, matches in pairs(utils.match_ids) do
+    for _, match_id in pairs(matches) do
+      pcall(vim.fn.matchdelete, match_id, winid)
+    end
+  end
+  utils.match_ids = {}
 end
 
 return utils
