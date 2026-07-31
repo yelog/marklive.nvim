@@ -114,6 +114,10 @@ M.enable = function()
     group = group,
     callback = function(args)
       if M.is_renderable_buffer(args.buf) then
+        if (args.event == 'CursorMoved' or args.event == 'CursorMovedI')
+          and render.handle_table_cursor(args.buf) then
+          return
+        end
         M.render()
       end
     end,

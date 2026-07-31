@@ -294,6 +294,39 @@ describe('table markdown cell styling', function()
   end)
 end)
 
+describe('table layout cache', function()
+  before_each(function()
+    vim.cmd('enew!')
+  end)
+
+  it('reuses a layout until the buffer changedtick changes', function()
+    local namespace = vim.api.nvim_create_namespace('marklive_table_cache_test')
+    vim.api.nvim_buf_set_lines(0, 0, -1, false, {
+      '| Header | Value |',
+      '| ------ | ----- |',
+      '| First | Second |',
+    })
+
+    local rc = {
+      bufnr = 0,
+      namespace = namespace,
+      config = {},
+      start_row = 0,
+      end_row = 3,
+    }
+    render.table(rc)
+    local first = render._table_layout_cache_by_buf[0].ranges['0:3']
+    render.table(rc)
+
+    assert.are.equal(first, render._table_layout_cache_by_buf[0].ranges['0:3'])
+
+    vim.api.nvim_buf_set_lines(0, 2, 3, false, { '| Updated | Value |' })
+    render.table(rc)
+
+    assert.are_not.equal(first, render._table_layout_cache_by_buf[0].ranges['0:3'])
+  end)
+end)
+
 describe('markdown italic rendering', function()
   before_each(function()
     vim.cmd('enew!')

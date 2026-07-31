@@ -2,6 +2,7 @@ local utils = require('marklive.utils')
 local render = {}
 local has_virt_text_repeat_linebreak = vim.fn.has('nvim-0.10') == 1
 local table_highlights_initialized = false
+local table_layout_cache_by_buf = {}
 
 local function ensure_showbreak_padding(width)
   if width <= 0 or not vim.wo.wrap then
@@ -90,6 +91,48 @@ local function is_pipe_table_line(line)
   if not line:match("^%s*|") then return false end
   local pipe_count = select(2, line:gsub("|", ""))
   return pipe_count >= 2
+end
+
+local function get_table_layout(bufnr, start_row, end_row)
+  local changedtick = vim.api.nvim_buf_get_changedtick(bufnr)
+  local cache = table_layout_cache_by_buf[bufnr]
+  if not cache or cache.changedtick ~= changedtick then
+    cache = { changedtick = changedtick, ranges = {} }
+    table_layout_cache_by_buf[bufnr] = cache
+  end
+
+  local key = start_row .. ':' .. end_row
+  if cache.ranges[key] then
+    return cache.ranges[key]
+  end
+
+  local table_cells = {}
+  local column_max_width = {}
+  local lines = vim.api.nvim_buf_get_lines(bufnr, start_row, end_row, false)
+  for _, line in ipairs(lines) do
+    local row = {}
+    for cell in string.gmatch(line, '|([^|]*)') do
+      local cell_text = vim.trim(cell)
+      table.insert(row, cell_text)
+    end
+    if #row > 0 and row[#row] == '' then
+      table.remove(row, #row)
+    end
+    table.insert(table_cells, row)
+    for col, cell_text in ipairs(row) do
+      local cell_len = vim.fn.strdisplaywidth(cell_text)
+      column_max_width[col] = math.max(column_max_width[col] or 0, cell_len)
+    end
+  end
+
+  local layout = {
+    table_cells = table_cells,
+    column_max_width = column_max_width,
+    col_count = #column_max_width,
+    alignments = detect_alignments(table_cells, #column_max_width),
+  }
+  cache.ranges[key] = layout
+  return layout
 end
 
 -- Build fence state once per render instead of rescanning the buffer for every match.
@@ -1037,32 +1080,11 @@ render.table = function(rc)
   local namespace = rc.namespace
   local start_row = rc.start_row
   local end_row = rc.end_row
-  local lines = vim.api.nvim_buf_get_lines(bufnr, start_row, end_row, false)
-
-  -- 解析表格每行每列内容
-  local table_cells = {}
-  local column_max_width = {}
-
-  for i, line in ipairs(lines) do
-    local row = {}
-    for cell in string.gmatch(line, "|([^|]*)") do
-      local cell_text = vim.trim(cell)
-      table.insert(row, cell_text)
-    end
-    -- 移除最后一个空列（如果存在且内容为空）
-    if #row > 0 and row[#row] == "" then
-      table.remove(row, #row)
-    end
-    table.insert(table_cells, row)
-    for col, cell_text in ipairs(row) do
-      local cell_len = vim.fn.strdisplaywidth(cell_text)
-      column_max_width[col] = math.max(column_max_width[col] or 0, cell_len)
-    end
-  end
-
-  local col_count = #column_max_width
-
-  local alignments = detect_alignments(table_cells, col_count)
+  local layout = get_table_layout(bufnr, start_row, end_row)
+  local table_cells = layout.table_cells
+  local column_max_width = layout.column_max_width
+  local col_count = layout.col_count
+  local alignments = layout.alignments
 
   -- 构造边框行（横线）
   local function make_border_row(left, mid, right)
@@ -1437,29 +1459,11 @@ local function render_table_row(rc, row_idx)
     '│', '─',
   }
 
-  local lines = vim.api.nvim_buf_get_lines(bufnr, start_row, end_row, false)
-  local table_cells = {}
-  local column_max_width = {}
-
-  for i, line in ipairs(lines) do
-    local row = {}
-    for cell in string.gmatch(line, "|([^|]*)") do
-      local cell_text = vim.trim(cell)
-      table.insert(row, cell_text)
-    end
-    if #row > 0 and row[#row] == "" then
-      table.remove(row, #row)
-    end
-    table.insert(table_cells, row)
-    for col, cell_text in ipairs(row) do
-      local cell_len = vim.fn.strdisplaywidth(cell_text)
-      column_max_width[col] = math.max(column_max_width[col] or 0, cell_len)
-    end
-  end
-
-  local col_count = #column_max_width
-
-  local alignments = detect_alignments(table_cells, col_count)
+  local layout = get_table_layout(bufnr, start_row, end_row)
+  local table_cells = layout.table_cells
+  local column_max_width = layout.column_max_width
+  local col_count = layout.col_count
+  local alignments = layout.alignments
 
   local function make_border_row(left, mid, right)
     local row = {}
@@ -1672,50 +1676,51 @@ end
 local last_cursor_row = nil
 local last_cursor_bufnr = nil
 
-vim.api.nvim_create_autocmd({ "CursorMoved", "CursorMovedI" }, {
-  group = vim.api.nvim_create_augroup("MarkliveTableCursor", { clear = true }),
-  callback = function()
-    local bufnr = vim.api.nvim_get_current_buf()
-    local table_ranges = table_ranges_by_buf[bufnr] or {}
-    local cursor = vim.api.nvim_win_get_cursor(0)
-    local cursor_row = cursor[1] - 1
+render.handle_table_cursor = function(bufnr)
+  bufnr = bufnr or vim.api.nvim_get_current_buf()
+  local table_ranges = table_ranges_by_buf[bufnr] or {}
+  local cursor = vim.api.nvim_win_get_cursor(0)
+  local cursor_row = cursor[1] - 1
 
-    -- 只在行号变化时处理
-    if last_cursor_row == cursor_row and last_cursor_bufnr == bufnr then
-      return
-    end
+  -- 只在行号变化时处理
+  if last_cursor_row == cursor_row and last_cursor_bufnr == bufnr then
+    return false
+  end
 
-    local prev_row = last_cursor_row
-    local prev_bufnr = last_cursor_bufnr
-    last_cursor_row = cursor_row
-    last_cursor_bufnr = bufnr
+  local prev_row = last_cursor_row
+  local prev_bufnr = last_cursor_bufnr
+  last_cursor_row = cursor_row
+  last_cursor_bufnr = bufnr
 
-    local line_count = vim.api.nvim_buf_line_count(bufnr)
-    local function clear_and_rerender_row(row)
-      if row == nil or row < 0 or row >= line_count then return end
-      for _, tbl in ipairs(table_ranges) do
-        if row >= tbl.start_row and row < tbl.end_row then
-          -- 跳过表格首行和末行，避免清除虚拟包裹行，防止闪烁
-          if row == tbl.start_row or row == tbl.end_row - 1 then
-            return
-          end
-          -- 只清除并重渲染该行
-          vim.api.nvim_buf_clear_namespace(tbl.bufnr, tbl.namespace, row, row + 1)
-          if render_table_row then
-            render_table_row(tbl, row)
-          end
-          break
+  local line_count = vim.api.nvim_buf_line_count(bufnr)
+  local handled = false
+  local function clear_and_rerender_row(row)
+    if row == nil or row < 0 or row >= line_count then return end
+    for _, tbl in ipairs(table_ranges) do
+      if row >= tbl.start_row and row < tbl.end_row then
+        -- 跳过表格首行和末行，避免清除虚拟包裹行，防止闪烁
+        if row == tbl.start_row or row == tbl.end_row - 1 then
+          return
         end
+        -- 只清除并重渲染该行
+        vim.api.nvim_buf_clear_namespace(tbl.bufnr, tbl.namespace, row, row + 1)
+        if render_table_row then
+          render_table_row(tbl, row)
+          handled = true
+        end
+        break
       end
     end
+  end
 
-    -- 只处理离开和进入的行
-    if prev_row ~= nil and prev_bufnr == bufnr and prev_row ~= cursor_row then
-      clear_and_rerender_row(prev_row)
-    end
-    clear_and_rerender_row(cursor_row)
-  end,
-})
+  -- 只处理离开和进入的行
+  if prev_row ~= nil and prev_bufnr == bufnr and prev_row ~= cursor_row then
+    clear_and_rerender_row(prev_row)
+  end
+  clear_and_rerender_row(cursor_row)
+
+  return handled
+end
 
 vim.api.nvim_create_autocmd({ "BufEnter" }, {
   group = vim.api.nvim_create_augroup("MarkliveTableBufEnter", { clear = true }),
@@ -1744,5 +1749,6 @@ end
 
 -- 让 code_block 能访问表格信息
 render._table_ranges_by_buf = table_ranges_by_buf
+render._table_layout_cache_by_buf = table_layout_cache_by_buf
 
 return render
