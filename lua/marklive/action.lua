@@ -1006,6 +1006,23 @@ local function next_ordered_number(prev, typ)
   return tostring(prev + 1) .. "."
 end
 
+-- Apply adjacent changes together so list updates do not trigger one render per line.
+local function apply_changed_line_ranges(original_lines, updated_lines)
+  local start_idx = nil
+  for i = 1, #updated_lines + 1 do
+    if i <= #updated_lines and original_lines[i] ~= updated_lines[i] then
+      start_idx = start_idx or i
+    elseif start_idx then
+      local replacement = {}
+      for j = start_idx, i - 1 do
+        replacement[#replacement + 1] = updated_lines[j]
+      end
+      vim.api.nvim_buf_set_lines(0, start_idx - 1, i - 1, false, replacement)
+      start_idx = nil
+    end
+  end
+end
+
 -- 检查并修正有序列表序号连续性
 local function fix_ordered_list(lines)
   -- 第一层有序列表按 treesitter 的 list 进行分组
@@ -1125,18 +1142,14 @@ local function auto_new_list_line(opts)
     if suffix ~= "" then
       new_line = new_line .. suffix
     end
+    local all_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+    table.insert(all_lines, row + 1, new_line)
     vim.api.nvim_buf_set_lines(0, row, row, false, { new_line })
 
     -- 插入后修正同层级所有有序列表序号
-    local all_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+    local orig_lines = vim.deepcopy(all_lines)
     fix_ordered_list(all_lines)
-    -- 只更新有变化的行
-    local orig_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-    for i = 1, #all_lines do
-      if orig_lines[i] ~= all_lines[i] then
-        vim.api.nvim_buf_set_lines(0, i - 1, i, false, { all_lines[i] })
-      end
-    end
+    apply_changed_line_ranges(orig_lines, all_lines)
 
     -- 重新获取新插入行内容
     local fixed_line = vim.api.nvim_buf_get_lines(0, row, row + 1, false)[1]
@@ -1217,18 +1230,13 @@ local function auto_new_list_line_above()
     end
 
     local new_line = indent .. new_marker .. " "
+    table.insert(buflines, row, new_line)
     vim.api.nvim_buf_set_lines(0, row - 1, row - 1, false, { new_line })
 
     -- 修正所有同级有序列表的序号（插入后再修正）
-    local all_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-    fix_ordered_list(all_lines)
-    -- 只更新有变化的行
-    local orig_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-    for i = 1, #all_lines do
-      if orig_lines[i] ~= all_lines[i] then
-        vim.api.nvim_buf_set_lines(0, i - 1, i, false, { all_lines[i] })
-      end
-    end
+    local orig_lines = vim.deepcopy(buflines)
+    fix_ordered_list(buflines)
+    apply_changed_line_ranges(orig_lines, buflines)
 
     -- 重新获取新插入行内容
     local fixed_line = vim.api.nvim_buf_get_lines(0, row - 1, row, false)[1]
@@ -1335,25 +1343,20 @@ local function list_indent(direction)
     end
   end
 
-  -- 应用缩进/反缩进后的行，只修改有变化的行
+  -- Apply the structural edit before querying Tree-sitter for the new list layout.
   for i = 1, #lines do
     local global_idx = start_row + i
     if all_lines[global_idx] ~= lines[i] then
-      vim.api.nvim_buf_set_lines(0, global_idx - 1, global_idx, false, { lines[i] })
       all_lines[global_idx] = lines[i]
     end
   end
+  local original_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+  apply_changed_line_ranges(original_lines, all_lines)
 
   -- 缩进/反缩进后，重新修正所有有序列表的序号
+  original_lines = vim.deepcopy(all_lines)
   fix_ordered_list(all_lines)
-
-  -- 只修改有变化的行
-  local fixed_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-  for i = 1, #all_lines do
-    if fixed_lines[i] ~= all_lines[i] then
-      vim.api.nvim_buf_set_lines(0, i - 1, i, false, { all_lines[i] })
-    end
-  end
+  apply_changed_line_ranges(original_lines, all_lines)
 
   -- 缩进后移动光标
   if indent_delta ~= 0 and mode ~= "v" and mode ~= "V" and mode ~= "\22" then
@@ -1440,13 +1443,10 @@ local function setup_list_autocmd()
           -- 如果是有序列表，需要重新修正序号
           if is_empty_ordered then
             local all_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+            all_lines[row] = ""
+            local orig_lines = vim.deepcopy(all_lines)
             fix_ordered_list(all_lines)
-            local orig_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-            for i = 1, #all_lines do
-              if orig_lines[i] ~= all_lines[i] then
-                vim.api.nvim_buf_set_lines(0, i - 1, i, false, { all_lines[i] })
-              end
-            end
+            apply_changed_line_ranges(orig_lines, all_lines)
           end
           return
         end
@@ -1492,13 +1492,10 @@ local function setup_list_autocmd()
             -- 如果是有序列表，需要重新修正序号
             if is_empty_ordered then
               local all_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+              all_lines[row] = ""
+              local orig_lines = vim.deepcopy(all_lines)
               fix_ordered_list(all_lines)
-              local orig_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-              for i = 1, #all_lines do
-                if orig_lines[i] ~= all_lines[i] then
-                  vim.api.nvim_buf_set_lines(0, i - 1, i, false, { all_lines[i] })
-                end
-              end
+              apply_changed_line_ranges(orig_lines, all_lines)
             end
           else
             -- 子层级，减少缩进一级
@@ -1542,13 +1539,10 @@ local function setup_list_autocmd()
             -- 如果是有序列表空行的反缩进，需要重新修正父/子两层的序号
             if is_empty_ordered then
               local all_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
+              all_lines[row] = new_line
+              local orig_lines = vim.deepcopy(all_lines)
               fix_ordered_list(all_lines)
-              local orig_lines = vim.api.nvim_buf_get_lines(0, 0, -1, false)
-              for i = 1, #all_lines do
-                if orig_lines[i] ~= all_lines[i] then
-                  vim.api.nvim_buf_set_lines(0, i - 1, i, false, { all_lines[i] })
-                end
-              end
+              apply_changed_line_ranges(orig_lines, all_lines)
             end
             -- 光标移动到新行行尾
             vim.api.nvim_win_set_cursor(0, { row, #new_line })

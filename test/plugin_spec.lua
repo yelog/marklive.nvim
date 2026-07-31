@@ -1,4 +1,5 @@
 local render = require('marklive.render')
+local action = require('marklive.action')
 
 local function test_config()
   return {
@@ -373,6 +374,39 @@ describe('table layout cache', function()
     render.table(rc)
 
     assert.are_not.equal(first, render._table_layout_cache_by_buf[0].ranges['0:3'])
+  end)
+end)
+
+describe('list actions', function()
+  before_each(function()
+    vim.cmd('enew!')
+    vim.bo.filetype = 'markdown'
+  end)
+
+  it('coalesces ordered-list indent and renumber updates', function()
+    vim.api.nvim_buf_set_lines(0, 0, -1, false, {
+      '1. First',
+      '2. Second',
+      '3. Third',
+    })
+    vim.api.nvim_win_set_cursor(0, { 2, 0 })
+
+    local changes = 0
+    vim.api.nvim_buf_attach(0, false, {
+      on_lines = function()
+        changes = changes + 1
+      end,
+    })
+
+    assert.is_true(action._list_indent('indent'))
+    vim.wait(50)
+
+    assert.are.same({
+      '1. First',
+      '    1. Second',
+      '2. Third',
+    }, vim.api.nvim_buf_get_lines(0, 0, -1, false))
+    assert.is_true(changes <= 2)
   end)
 end)
 
