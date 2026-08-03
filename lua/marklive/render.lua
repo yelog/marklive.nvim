@@ -993,7 +993,7 @@ render._init_visible = function(bufnr, namespace, config, query, regex_list)
               end_col = group.end_col + 1,
               conceal = conceal,
               hl_group = hl_group,
-              priority = 0,
+              priority = config.render[name].priority or 0,
             })
           end
 

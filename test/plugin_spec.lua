@@ -83,6 +83,34 @@ local function find_italic_extmarks(namespace)
   return italic_extmarks
 end
 
+local function find_conceal(namespace, row, conceal)
+  local extmarks = vim.api.nvim_buf_get_extmarks(0, namespace, { row, 0 }, { row, -1 }, {
+    details = true,
+  })
+  for _, extmark in ipairs(extmarks) do
+    if extmark[4] and extmark[4].conceal == conceal then
+      return extmark
+    end
+  end
+end
+
+describe('indeterminate task marker', function()
+  before_each(function()
+    vim.cmd('enew!')
+  end)
+
+  it('conceals [-] with the configured icon', function()
+    local namespace = render_markdown({ '- [-] Task List', '    * [x] task1', '    * [ ] task2' })
+    local extmark = find_conceal(namespace, 0, '󰡖')
+
+    assert.is_not_nil(extmark)
+    assert.are.equal(2, extmark[3])
+    assert.are.equal(5, extmark[4].end_col)
+    assert.are.equal('task_list_marker_indeterminate', extmark[4].hl_group)
+    assert.are.equal(200, extmark[4].priority)
+  end)
+end)
+
 describe('code block language badge', function()
   before_each(function()
     vim.cmd('enew!')
