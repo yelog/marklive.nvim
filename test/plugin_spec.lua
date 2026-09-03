@@ -473,3 +473,59 @@ describe('markdown italic rendering', function()
     assert.are.same({}, find_italic_extmarks(namespace))
   end)
 end)
+
+describe('render event coalescing', function()
+  local marklive = require('marklive')
+  local original_render
+
+  before_each(function()
+    vim.cmd('enew!')
+    vim.bo.filetype = 'markdown'
+    vim.api.nvim_buf_set_lines(0, 0, -1, false, { 'first line', 'second line' })
+    vim.api.nvim_win_set_cursor(0, { 1, 0 })
+    marklive.setup({ render_delay = 0 })
+    render.cleanup(0)
+    original_render = marklive.render
+  end)
+
+  after_each(function()
+    marklive.render = original_render
+  end)
+
+  it('defers insert changes until insert mode is left', function()
+    local renders = 0
+    marklive.render = function()
+      renders = renders + 1
+    end
+
+    vim.api.nvim_exec_autocmds('TextChangedI', { buffer = 0 })
+    vim.api.nvim_exec_autocmds('TextChangedI', { buffer = 0 })
+    assert.are.equal(0, renders)
+
+    vim.api.nvim_exec_autocmds('InsertLeave', { buffer = 0 })
+    assert.are.equal(1, renders)
+  end)
+
+  it('does not rebuild rendering for ordinary cursor movement', function()
+    local renders = 0
+    marklive.render = function()
+      renders = renders + 1
+    end
+
+    vim.api.nvim_win_set_cursor(0, { 2, 0 })
+    vim.api.nvim_exec_autocmds('CursorMoved', { buffer = 0 })
+
+    assert.are.equal(0, renders)
+  end)
+
+  it('skips insert leave when the buffer was not changed', function()
+    local renders = 0
+    marklive.render = function()
+      renders = renders + 1
+    end
+
+    vim.api.nvim_exec_autocmds('InsertLeave', { buffer = 0 })
+
+    assert.are.equal(0, renders)
+  end)
+end)

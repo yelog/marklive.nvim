@@ -3,6 +3,7 @@ local render = {}
 local has_virt_text_repeat_linebreak = vim.fn.has('nvim-0.10') == 1
 local table_highlights_initialized = false
 local table_layout_cache_by_buf = {}
+local table_ranges_by_buf = {}
 
 local function ensure_showbreak_padding(width)
   if width <= 0 or not vim.wo.wrap then
@@ -133,20 +134,6 @@ local function get_table_layout(bufnr, start_row, end_row)
   }
   cache.ranges[key] = layout
   return layout
-end
-
--- Build fence state once per render instead of rescanning the buffer for every match.
-local function codeblock_rows(bufnr)
-  local rows = {}
-  local fence_count = 0
-  local lines = vim.api.nvim_buf_get_lines(bufnr, 0, -1, false)
-  for row, line in ipairs(lines) do
-    if line:match('^%s*```') then
-      fence_count = fence_count + 1
-    end
-    rows[row - 1] = fence_count % 2 == 1
-  end
-  return rows
 end
 
 local codeblock_language_aliases = {
@@ -687,6 +674,34 @@ end
 local render_timers = {}
 local query_cache = {}
 
+local function cleanup_timer(bufnr)
+  local timer = render_timers[bufnr]
+  if not timer then
+    return
+  end
+
+  timer:stop()
+  if not timer:is_closing() then
+    timer:close()
+  end
+  render_timers[bufnr] = nil
+end
+
+render.cleanup = function(bufnr)
+  if bufnr ~= nil then
+    cleanup_timer(bufnr)
+    table_layout_cache_by_buf[bufnr] = nil
+    return
+  end
+
+  for buffer in pairs(render_timers) do
+    cleanup_timer(buffer)
+  end
+  for buffer in pairs(table_layout_cache_by_buf) do
+    table_layout_cache_by_buf[buffer] = nil
+  end
+end
+
 local function parse_query(lang, source)
   local key = lang .. '\n' .. source
   local cached = query_cache[key]
@@ -713,6 +728,9 @@ render.throttle_init = function(namespace, config, query, regex_list)
     delay = config.render_delay
   end
   timer:start(delay, 0, vim.schedule_wrap(function()
+    if render_timers[bufnr] ~= timer then
+      return
+    end
     render._init_visible(bufnr, namespace, config, query, regex_list)
   end))
 end
@@ -772,6 +790,7 @@ render._init_visible = function(bufnr, namespace, config, query, regex_list)
   end
   visible_ranges = merged_ranges
   local width = max_width
+  table_ranges_by_buf[bufnr] = {}
 
   for _, range in ipairs(visible_ranges) do
     vim.api.nvim_buf_clear_namespace(bufnr, namespace, range[1], range[2])
@@ -820,7 +839,44 @@ render._init_visible = function(bufnr, namespace, config, query, regex_list)
     end
   end
 
-  local fenced_rows = codeblock_rows(bufnr)
+  local fenced_ranges = {}
+  local fenced_query = parse_query(ts_lang, '(fenced_code_block) @fenced')
+  if fenced_query then
+    local seen_fenced_ranges = {}
+    local function add_fenced_range(node)
+      while node and node:type() ~= 'fenced_code_block' do
+        node = node:parent()
+      end
+      if not node then
+        return
+      end
+
+      local start_row, _, end_row = node:range()
+      local key = start_row .. ':' .. end_row
+      if not seen_fenced_ranges[key] then
+        seen_fenced_ranges[key] = true
+        table.insert(fenced_ranges, { start_row, end_row })
+      end
+    end
+
+    for _, range in ipairs(visible_ranges) do
+      if range[1] < range[2] then
+        add_fenced_range(root:named_descendant_for_range(range[1], 0, range[1], 0))
+      end
+      for _, node in fenced_query:iter_captures(root, bufnr, range[1], range[2]) do
+        add_fenced_range(node)
+      end
+    end
+  end
+
+  local function is_fenced_row(row)
+    for _, range in ipairs(fenced_ranges) do
+      if row >= range[1] and row < range[2] then
+        return true
+      end
+    end
+    return false
+  end
 
   if has_italic_query then
     -- Limit inline parsing to Markdown inline nodes to exclude fenced code blocks.
@@ -847,7 +903,7 @@ render._init_visible = function(bufnr, namespace, config, query, regex_list)
       for _, range in ipairs(inline_ranges) do
         for _, node in inline_query:iter_captures(inline_root, bufnr, range[1], range[3]) do
           local start_row, start_col, end_row, end_col = node:range()
-          if not fenced_rows[start_row] then
+          if not is_fenced_row(start_row) then
             render.italic({
               bufnr = bufnr,
               namespace = namespace,
@@ -877,7 +933,7 @@ render._init_visible = function(bufnr, namespace, config, query, regex_list)
       local icon_padding = config.render[name].icon_padding
 
       -- 多窗口可视区域合并后渲染；保持原有代码块跳过逻辑
-      if name ~= "code_block" and fenced_rows[start_row] then
+      if name ~= "code_block" and is_fenced_row(start_row) then
         goto continue_query
       end
 
@@ -972,7 +1028,7 @@ render._init_visible = function(bufnr, namespace, config, query, regex_list)
       local matches = utils.find_matches_with_groups(lines, regex)
       for _, match in ipairs(matches) do
         local lnum = r_start + match.lnum
-        if fenced_rows[lnum] then
+        if is_fenced_row(lnum) then
           goto continue_regex
         end
         if #match.groups == 0 then
@@ -1427,9 +1483,6 @@ render.table_normal_cell = function(rc)
 end
 
 -- 表格渲染自动切换（normal模式下，光标进入表格取消渲染，离开表格重新渲染）
--- 多表格渲染信息存储（改为 buffer-local）
-local table_ranges_by_buf = {}
-
 -- 包装原始 table 渲染函数，记录每个表格范围
 local _orig_table = render.table
 
@@ -1676,7 +1729,7 @@ render.handle_table_cursor = function(bufnr)
 
   -- 只在行号变化时处理
   if last_cursor_row == cursor_row and last_cursor_bufnr == bufnr then
-    return false
+    return true
   end
 
   local prev_row = last_cursor_row
@@ -1686,12 +1739,14 @@ render.handle_table_cursor = function(bufnr)
 
   local line_count = vim.api.nvim_buf_line_count(bufnr)
   local handled = false
+  local needs_full_render = false
   local function clear_and_rerender_row(row)
     if row == nil or row < 0 or row >= line_count then return end
     for _, tbl in ipairs(table_ranges) do
       if row >= tbl.start_row and row < tbl.end_row then
         -- 跳过表格首行和末行，避免清除虚拟包裹行，防止闪烁
         if row == tbl.start_row or row == tbl.end_row - 1 then
+          needs_full_render = true
           return
         end
         -- 只清除并重渲染该行
@@ -1711,36 +1766,41 @@ render.handle_table_cursor = function(bufnr)
   end
   clear_and_rerender_row(cursor_row)
 
-  return handled
-end
-
-vim.api.nvim_create_autocmd({ "BufEnter" }, {
-  group = vim.api.nvim_create_augroup("MarkliveTableBufEnter", { clear = true }),
-  callback = function()
-    if render.last_namespace and render.last_config and render.last_query and render.last_regex_list then
-      require('marklive.render').init(render.last_namespace, render.last_config, render.last_query,
-        render.last_regex_list)
+  local function is_fence_row(row)
+    if row == nil or row < 0 or row >= line_count then
+      return false
     end
-  end,
-})
+    local line = vim.api.nvim_buf_get_lines(bufnr, row, row + 1, false)[1] or ''
+    return line:match('^%s*```+') ~= nil or line:match('^%s*~~~+') ~= nil
+  end
 
--- 包装 init，记录 query 和 regex_list
-render.last_query = nil
-render.last_regex_list = nil
-render.last_namespace = nil
-render.last_config = nil
-local _orig_init = render.init
-render.init = function(namespace, config, query, regex_list)
-  render.last_query = query
-  render.last_regex_list = regex_list
-  render.last_namespace = namespace
-  render.last_config = config
-  -- 不要清空 table_ranges_by_buf[bufnr]，否则会导致 has_table 判断失效
-  _orig_init(namespace, config, query, regex_list)
+  -- Only tables and fence decorations depend on the cursor row. Concealcursor
+  -- handles every other element without rebuilding all visible extmarks.
+  return not needs_full_render
+    and (handled or not (is_fence_row(prev_row) or is_fence_row(cursor_row)))
 end
 
 -- 让 code_block 能访问表格信息
 render._table_ranges_by_buf = table_ranges_by_buf
 render._table_layout_cache_by_buf = table_layout_cache_by_buf
+
+local _cleanup = render.cleanup
+render.cleanup = function(bufnr)
+  _cleanup(bufnr)
+  if bufnr ~= nil then
+    table_ranges_by_buf[bufnr] = nil
+    if last_cursor_bufnr == bufnr then
+      last_cursor_bufnr = nil
+      last_cursor_row = nil
+    end
+    return
+  end
+
+  for buffer in pairs(table_ranges_by_buf) do
+    table_ranges_by_buf[buffer] = nil
+  end
+  last_cursor_bufnr = nil
+  last_cursor_row = nil
+end
 
 return render

@@ -103,9 +103,10 @@ M.enable = function()
   utils.setHighlight(M.config.highlight_config or {}, vim.o.filetype)
 
   local group = vim.api.nvim_create_augroup('Marklive', { clear = true })
+  local insert_changes = {}
   local render_events = {
-    'FileChangedShellPost', 'Syntax', 'TextChanged', 'InsertLeave', 'TextChangedI',
-    'CursorMoved', 'CursorMovedI', 'WinScrolled',
+    'BufEnter', 'FileChangedShellPost', 'Syntax', 'TextChanged', 'InsertLeave',
+    'TextChangedI', 'CursorMoved', 'CursorMovedI', 'WinScrolled',
   }
   if vim.fn.exists('##FoldChanged') == 1 then
     table.insert(render_events, 'FoldChanged')
@@ -114,6 +115,27 @@ M.enable = function()
     group = group,
     callback = function(args)
       if M.is_renderable_buffer(args.buf) then
+        if args.event == 'TextChangedI' then
+          insert_changes[args.buf] = vim.api.nvim_win_get_cursor(0)[1]
+          return
+        end
+
+        if args.event == 'CursorMovedI' then
+          local changed_row = insert_changes[args.buf]
+          local cursor_row = vim.api.nvim_win_get_cursor(0)[1]
+          if changed_row and changed_row ~= cursor_row then
+            insert_changes[args.buf] = nil
+            M.render()
+            return
+          end
+        elseif args.event == 'InsertLeave' then
+          local changed = insert_changes[args.buf] ~= nil
+          insert_changes[args.buf] = nil
+          if not changed then
+            return
+          end
+        end
+
         if (args.event == 'CursorMoved' or args.event == 'CursorMovedI')
           and render.handle_table_cursor(args.buf) then
           return
@@ -129,11 +151,19 @@ M.enable = function()
       M.render()
     end,
   })
+  vim.api.nvim_create_autocmd('BufWipeout', {
+    group = group,
+    callback = function(args)
+      insert_changes[args.buf] = nil
+      render.cleanup(args.buf)
+    end,
+  })
 end
 
 M.disable = function()
   M.config.enable = false
   action.setup_list_autocmd()
+  render.cleanup()
   vim.api.nvim_buf_clear_namespace(0, M.namespace, 0, -1)
 
   -- clear highlight
